@@ -2,29 +2,47 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**A clean topbar status strip for Google Antigravity — check subagents, context usage, generation speed, and quota battery at a glance without opening any panel.**
+**A clean topbar status strip for Google Antigravity — see subagents, context window, generation speed, and dual-pool battery quota at a glance without opening any panel.**
 
-![Antigravity Usage HUD](assets/hud-topbar.png)
+![Antigravity Usage HUD Topbar](assets/hud-topbar.png)
 
-## What It Shows & How It Changes
+---
 
-Right in the top-right titlebar of Antigravity:
+## 1. Dual-Pool Battery Toggle (`Gemini` ↔ `Claude & GPT`)
 
-- **Subagent Status (Left)**: Shows whether the current chat is running and how many subagents are active (`0 子代理` / `2 子运行`). Hover or click to expand the live subagent stream for the current window:
+- The battery on the right shows your **5-hour quota** (7 cells, ~14% each) inside and your **weekly quota** as the retro-red outer border ring.
+- By default, it automatically matches the quota pool of the current conversation's model.
+- **Only the battery is clickable**: click it once to switch in place between **`Gemini` (deep green)** and **`Claude & GPT` (pure white)** — zero layout shift, no popup panel, and hovering context or speed will not light up.
 
-  ![Subagent Live Stream Panel](assets/hud-subagent-panel.png)
+| Pool | Live Topbar HUD |
+| :--- | :--- |
+| **`Gemini` Pool**<br>*(Deep Green 7-cell battery + red weekly ring)* | ![Gemini Pool Battery](assets/hud-battery-gemini.png) |
+| **`Claude & GPT` Pool**<br>*(Click battery to toggle in place — Pure White 7-cell battery + red weekly ring)* | ![Claude & GPT Pool Battery](assets/hud-battery-claude.png) |
 
-- **Context Ring**: Shows context percentage (`20%`, turning orange at `≥70%` and red at `≥88%`) and total window size (`256k` / `512k` / `1M`) underneath.
-- **Speed & Model**: Dot-matrix `t/s` readout with the active model name below it, colored by speed tier:
-  - `< 46 t/s`: white
-  - `46 – 99 t/s`: deep green
-  - `100 – 179 t/s`: deep orange
-  - `≥ 180 t/s`: deep purple
-- **7-Cell Quota Battery (Only Clickable Part on the Right)**:
-  - Inside: 7 cells (~14% each) for the **5-hour window**.
-  - Outside border: retro-red ring for the **weekly limit**.
-  - **Click the battery** to toggle in place between **`Gemini`** (deep green) and **`Claude & GPT`** (pure white) — nothing pops open, and hovering context/speed won't light up.
-- **New Chat / Empty Route**: Switching to a New Conversation immediately resets context (`0%`) and speed (`待命`) instead of showing the previous chat's numbers.
+---
+
+## 2. Speed Color Tiers & Context Ring States
+
+Everything updates in place for the **active window only**:
+
+- **Dot-Matrix Speed (`t/s`) + Model Sublabel**:
+  - `< 46 t/s`: neutral dark/white (shown in the `11.8 t/s · Argon 4-medium` capture above)
+  - `46 – 99 t/s`: **deep green** (`#148838`, shown in the `94.4 t/s` banner at the top)
+  - `100 – 179 t/s`: **deep orange** (`#c2410c`, shown in the `122 t/s` capture above)
+  - `≥ 180 t/s`: **deep purple** (`#7e22ce`)
+- **2× Context Ring + Window Capacity (`256k` / `512k` / `1M`)**:
+  - Normal (`< 70%`): blue ring (`20%` / `34%` above)
+  - Warning (`70% – 87%`): orange ring (`87%` below)
+  - Critical (`≥ 88%`): red ring (`93%` above)
+- **New Chat Auto-Reset**: Switching to a New Conversation immediately clears context (`0%`) and speed (`待命`) so previous chats never leak over.
+
+---
+
+## 3. Single-Window Subagent Stream (Left Pill)
+
+The left pill (`0 子代理` / `2 子运行`) tracks only the current window's main agent and subagents. Hover or click it to view the live subagent stream:
+
+![Subagent Live Stream Panel](assets/hud-subagent-panel.png)
 
 ---
 
@@ -42,8 +60,8 @@ git clone https://github.com/Malpaca33/antigravity-usage-hud.git ~/.gemini/confi
 git clone https://github.com/Malpaca33/antigravity-usage-hud.git "$env:USERPROFILE\.gemini\config\plugins\usage-monitor"
 ```
 
-Turn on `usage-monitor` under **Customizations -> Installed** in Antigravity.  
-*(The original 4-tab sidecar panel is still available via `⋮ -> Extensions -> 用量监控`.)*
+Enable `usage-monitor` under **Customizations -> Installed** in Antigravity.  
+*(The original 4-tab sidecar panel remains accessible via `⋮ -> Extensions -> 用量监控`.)*
 
 ---
 
