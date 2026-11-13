@@ -705,15 +705,15 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
           account: { tierName: 'Google AI Ultra', planName: 'Pro', totalConversations: 5 },
           runningConversations: [
             {
-              cascadeId: 'bbbbbbbb-2222-3333-4444-cccccccccccc',
-              title: 'Background Security Audit',
-              isCurrentSelected: false,
+              cascadeId: 'aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb',
+              title: 'Dual Mode Session',
+              isCurrentSelected: true,
               isMainRunning: true,
               isRunning: true,
               stepCount: 24,
               totalStepCount: 38,
-              latestTokPerSec: 64.2,
-              contextUsedPct: 48.4,
+              latestTokPerSec: 92.4,
+              contextUsedPct: 50,
               mainActivity: {
                 phase: 'tool',
                 label: '执行命令',
@@ -726,7 +726,7 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
               runningSubagentCount: 1,
               subagents: [
                 {
-                  cascadeId: 'bbbbbbbb-2222-3333-4444-cccccccccccc:sub1',
+                  cascadeId: 'aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb:sub1',
                   index: 1,
                   badgeText: '子1',
                   shortLabel: '子代理 #1',
@@ -901,93 +901,90 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     assert.equal(multiBtn.querySelector('.svg-icon'), null, 'Multi-session button has zero SVG clutter');
     assert.equal(multiBtn.classList.contains('is-running'), true);
     const multiLabelEl = multiBtn.querySelector('.wm-multi-label');
-    assert.equal(multiLabelEl.textContent, '2 运行 · 1 子');
+    assert.equal(multiLabelEl.textContent, '1 子运行');
 
-    // Verify capsule reactive text (50% context, 92.4 t/s without bolt SVG, 余 68%)
+    // Verify capsule reactive UI (2x context ring + 50% / 256k sublabel, dot-matrix 92.4 t/s deep green tier + model sublabel, fixed-width 7-cell Mac battery + click pool toggle, left subagent panel openable, right capsule hover/click non-expanding)
+    const ctxSegEl = capsuleHost.shadowRoot.querySelector('.wm-ctx-seg');
+    const ctxRingSvg = ctxSegEl.querySelector('.wm-ring-svg');
     const ctxPctEl = capsuleHost.shadowRoot.querySelector('.wm-ctx-pct');
+    const ctxLimitEl = capsuleHost.shadowRoot.querySelector('.wm-ctx-limit');
     const speedSegEl = capsuleHost.shadowRoot.querySelector('.wm-seg-speed');
     const quotaSegEl = capsuleHost.shadowRoot.querySelector('.wm-seg-quota');
+    assert.equal(ctxRingSvg.getAttribute('viewBox'), '0 0 26 26', 'Context ring expanded to 2x radius viewBox');
+    assert.equal(ctxRingSvg.children[0].getAttribute('r'), '10.4', 'Context ring radius doubled to 10.4');
     assert.equal(ctxPctEl.textContent, '50%');
-    assert.equal(speedSegEl.children.length, 1, 'Speed segment has no lightning bolt SVG');
+    assert.equal(ctxLimitEl.textContent, '256k');
+    assert.equal(speedSegEl.children.length, 2, 'Speed segment has dot-matrix speed row + compact model line');
     assert.equal(speedSegEl.querySelector('.svg-icon'), null);
-    assert.ok(speedSegEl.children[0].textContent.includes('92.4 t/s'));
-    assert.equal(quotaSegEl.children[0].textContent, '余 68%');
+    assert.equal(speedSegEl.classList.contains('speed-tier-green'), true, '92.4 t/s uses 46-100 green tier');
+    assert.ok(speedSegEl.querySelector('.wm-speed-dot-svg').children.length > 0, 'Dot-matrix speed SVG rendered');
+    assert.equal(speedSegEl.querySelector('.wm-speed-unit').textContent, 't/s');
+    assert.ok(speedSegEl.querySelector('.wm-speed-text').textContent.includes('92.4 t/s'));
+    assert.equal(speedSegEl.querySelector('.wm-speed-model').textContent, 'carbon-high');
+    assert.ok(quotaSegEl.querySelector('.wm-bat-wrap'), 'Quota slot renders Mac battery widget instead of text');
+    assert.equal(quotaSegEl.querySelectorAll('.wm-bat-cell').length, 7, 'Topbar Mac battery has 7 cells (~14% each)');
+    assert.equal(quotaSegEl.getAttribute('data-pool'), 'gemini');
+    assert.equal(quotaSegEl.querySelector('.wm-quota-pool-label').textContent, 'Gemini');
+    assert.equal(quotaSegEl.getAttribute('data-5h-pct'), '44');
+    assert.equal(quotaSegEl.getAttribute('data-weekly-pct'), '26');
+    assert.equal(quotaSegEl.querySelector('.wm-bat-weekly-fill').attributes.get('stroke-dashoffset'), '74');
+    assert.match(stylesCss, /\.wm-seg-quota\s*\{[^}]*width:\s*62px;/, 'Quota battery slot uses fixed width for zero click shift');
+    assert.match(stylesCss, /\.wm-seg-speed\s*\{[^}]*width:\s*82px;/, 'Speed slot uses fixed width for zero live shift');
+    assert.match(stylesCss, /\.wm-bat-cell-fill\s*\{[^}]*background:\s*#148838;/, 'Gemini battery cells use deeper truer green');
+    assert.match(stylesCss, /\.wm-seg-speed\.speed-tier-low\s*\{\s*color:\s*var\(--text-primary\);/, 'Below 46 t/s tier uses crisp primary white');
+    assert.match(stylesCss, /\.wm-seg-speed\.speed-tier-green\s*\{\s*color:\s*#148838;/, 'Speed green tier uses deeper truer green');
+    assert.match(stylesCss, /\.wm-seg-speed\.speed-tier-orange\s*\{\s*color:\s*#c2410c;/, 'Speed orange tier uses deeper orange');
+    assert.match(stylesCss, /\.wm-seg-speed\.speed-tier-purple\s*\{\s*color:\s*#7e22ce;/, 'Speed >=180 tier uses deeper purple');
 
-    // Verify hovering left multi-session button opens .wm-multi-panel with live tasks, subagents, and recent sessions
+    // Clicking capsuleBtn never expands the full popover; clicking battery swaps Gemini <-> Claude & GPT in-place
+    capsuleBtn.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(ov.isOpen(), false, 'Left-clicking topbar capsule never expands main popover panel');
+    quotaSegEl.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(ov.isOpen(), false);
+    assert.equal(quotaSegEl.getAttribute('data-pool'), 'claude');
+    assert.equal(quotaSegEl.querySelector('.wm-quota-pool-label').textContent, 'Claude & GPT');
+    assert.equal(quotaSegEl.getAttribute('data-5h-pct'), '100');
+    assert.equal(quotaSegEl.getAttribute('data-weekly-pct'), '91');
+    assert.equal(quotaSegEl.querySelector('.wm-bat-weekly-fill').attributes.get('stroke-dashoffset'), '9');
+    quotaSegEl.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(quotaSegEl.getAttribute('data-pool'), 'gemini');
+
+    // Left subagent button opens .wm-multi-panel on hover and pins on click showing ONLY current window session & subagents
     const multiPanelEl = portalHost.shadowRoot.querySelector('.wm-multi-panel');
     const hoverTipEl = portalHost.shadowRoot.querySelector('.wm-hover-tip');
-    assert.ok(multiPanelEl, 'Multi-session floating panel mounted in portal shadow root');
-    assert.equal(multiPanelEl.children.length, 3, 'Single-layer online sessions panel (header + empty state + running list)');
+    assert.ok(multiPanelEl, 'Current-window stream panel mounted in portal shadow root');
+    assert.ok(hoverTipEl, 'Hover overview HUD mounted in portal shadow root');
 
     multiBtn.dispatchEvent({ type: 'mouseenter', clientX: 930, clientY: 18 });
-    assert.equal(ov.isMultiOpen(), true);
+    assert.equal(ov.isMultiOpen(), true, 'Hovering multi-session button opens current-window stream panel');
     assert.equal(ov.isMultiHoverOpen(), true);
     assert.equal(multiPanelEl.hasAttribute('hidden'), false);
-
-    // Stationary pointer inside multiBtn prevents synthetic mouseleave blink
     multiBtn.dispatchEvent({ type: 'mouseleave', clientX: 930, clientY: 18 });
     await new Promise((r) => setTimeout(r, 110));
     assert.equal(ov.isMultiOpen(), true, 'Stationary pointer inside multi button prevents synthetic mouseleave blink');
 
     const runningListEl = multiPanelEl.querySelector('.live-activity-list');
-    assert.equal(runningListEl.children.length, 2, 'Both running session cards rendered');
+    assert.equal(runningListEl.children.length, 1, 'Cross-conversation sessions filtered out; only current window rendered');
     const liveTaskCard = runningListEl.children[0];
-    const soloTaskCard = runningListEl.children[1];
-    assert.equal(liveTaskCard.querySelector('.live-task-title').textContent, 'Background Security Audit');
-    assert.equal(liveTaskCard.querySelector('.badge-main').hasAttribute('hidden'), false, 'Session with subagents shows 主 badge');
-    assert.equal(liveTaskCard.querySelector('.live-activity-phase').textContent, '执行命令');
-    assert.equal(liveTaskCard.querySelector('.live-sub-list').hasAttribute('hidden'), false, 'Active subagents auto-expanded');
+    assert.equal(liveTaskCard.querySelector('.live-task-title').textContent, 'Dual Mode Session');
     assert.equal(liveTaskCard.querySelector('.live-sub-role').textContent, 'Auth Researcher');
-    assert.equal(soloTaskCard.querySelector('.live-task-title').textContent, 'Solo Refactor Task');
-    assert.equal(soloTaskCard.querySelector('.badge-main').hasAttribute('hidden'), true, 'Session without subagents hides 主 badge');
-    const liveDotSvg = liveTaskCard.querySelector('.live-activity-dot').children[0];
-    assert.equal(liveDotSvg.attributes.get('width'), '11', 'Enlarged live activity SVG dot size is 11');
-    assert.equal(liveDotSvg.children[0].attributes.get('r'), '5', 'Enlarged dot circle radius is 5');
-    assert.match(stylesCss, /\.wm-multi-dot\s*\{\s*width:\s*8px;\s*height:\s*8px;/, 'Topbar multi-session dot enlarged to 8px');
-    assert.equal(multiPanelEl.querySelector('.wm-recent-list'), null, 'Recent sessions list removed so panel shows online sessions only');
-    assert.equal(multiPanelEl.querySelector('.panel'), null, 'Single-layer multi-session panel without nested .panel box');
 
-    // Verify hovering right capsule closes unpinned multi-session panel and opens rich 3-card hover overview HUD (.wm-hover-tip)
-    assert.ok(hoverTipEl, 'Hover overview HUD mounted in portal shadow root');
-    assert.equal(
-      hoverTipEl.children.length,
-      4,
-      'Hover HUD has optional update banner + 3 signature cards (matrix + context + quotas)'
-    );
-    assert.equal(
-      multiPanelEl.querySelector('.wm-multi-empty-hint'),
-      null,
-      'Redundant hover/pin hint copy removed from multi-session empty state'
-    );
+    multiBtn.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(ov.isMultiPinnedOpen(), true, 'Clicking multi-session button pins stream panel open');
+    assert.equal(multiBtn.classList.contains('is-open'), true);
+    assert.equal(multiLabelEl.textContent, '1 子运行', 'Inline subagent label remains visible');
+    multiBtn.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(ov.isMultiOpen(), false, 'Second click unpins and closes stream panel');
 
     capsuleBtn.dispatchEvent({ type: 'mouseenter', clientX: 960, clientY: 18 });
-    assert.equal(ov.isMultiOpen(), false, 'Mutual exclusion closes unpinned multi-session panel');
-    assert.equal(ov.isHoverOpen(), true);
-    assert.equal(hoverTipEl.hasAttribute('hidden'), false);
+    assert.equal(ov.isHoverOpen(), false, 'Hovering topbar capsule never opens floating hover HUD');
+    assert.equal(hoverTipEl.hasAttribute('hidden'), true);
+    assert.equal(hoverTipEl.querySelector('.speed-compact-value').textContent, '92.4 tok/s');
+    assert.ok(hoverTipEl.querySelector('.progress-track')?.children[0]);
+    const hoverCtxSegBefore = hoverTipEl.querySelector('.progress-track')?.children[0];
+    const hoverSpeedVal = hoverTipEl.querySelector('.speed-compact-value');
 
-    // Transient mouseleave while pointer remains inside capsule rect (900..1080 x 6..32) must NOT close hover HUD
-    capsuleBtn.dispatchEvent({ type: 'mouseleave', clientX: 960, clientY: 18 });
-    await new Promise((r) => setTimeout(r, 55));
-    assert.equal(ov.isHoverOpen(), true, 'Stationary pointer inside capsule prevents synthetic mouseleave blink');
-
-    const hoverMatrix = hoverTipEl.querySelector('.telemetry-matrix');
-    const hoverLegendGrid = hoverTipEl.querySelector('.ctx-legend-grid');
-    const hoverQuotaPools = hoverTipEl.querySelector('.wm-hover-quota-pools');
-    assert.equal(hoverMatrix.children.length, 4);
-    assert.equal(hoverMatrix.children[0].children[1].textContent, '92.4 tok/s');
-    assert.equal(hoverMatrix.children[3].children[1].textContent, '$0.040');
-    assert.equal(hoverLegendGrid.children.length, 10, 'All 10 context legend slots pre-reserved');
-    const firstLegendSlotBefore = hoverLegendGrid.children[0];
-    assert.equal(firstLegendSlotBefore.children[0].children[1].textContent, '工具结果');
-    assert.equal(firstLegendSlotBefore.children[1].textContent, '76.0k');
-    assert.equal(hoverQuotaPools.children.length, 2, 'Default Gemini & Claude/GPT quota pools pre-reserved');
-
-    // Verify clicking multi-session button pins open multi-session panel, and clicking capsule switches to 4-tab panel
-    multiBtn.dispatchEvent({ type: 'click', stopPropagation() {} });
-    assert.equal(ov.isMultiPinnedOpen(), true);
-    assert.equal(ov.isHoverOpen(), false);
-    assert.equal(multiBtn.classList.contains('is-open'), true);
-
+    // Programmatic ov.open() still works for direct settings/views testing
     ov.open();
     assert.equal(ov.isMultiOpen(), false);
     assert.equal(ov.isHoverOpen(), false);
@@ -1085,8 +1082,10 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     slot0SelectEl.querySelectorAll('.select-option')[5].dispatchEvent({ type: 'click', stopPropagation() {} });
     await new Promise((r) => setTimeout(r, 30));
     assert.equal(capSlots[0].getAttribute('data-metric'), 'gemini_5h');
-    assert.equal(capSlots[0].children.length, 1, 'Ring SVG detached cleanly when slot leaves context');
-    assert.equal(capSlots[0].children[0].textContent, '余 44%');
+    assert.equal(capSlots[0].querySelector('.wm-ring-svg'), null, 'Ring SVG detached cleanly when slot leaves context');
+    assert.equal(capSlots[0].children.length, 2, 'Battery wrap + pool sublabel mounted');
+    assert.ok(capSlots[0].querySelector('.wm-bat-wrap'), 'Battery gauge mounted for quota slot');
+    assert.equal(capSlots[0].getAttribute('data-5h-pct'), '44');
 
     // Slot 1 -> TTFT (option index 2)
     slot1SelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -1110,7 +1109,8 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     await new Promise((r) => setTimeout(r, 30));
     assert.deepEqual(mockSettings.topbarCapsuleSlots, ['ttft', 'gemini_5h', 'cost']);
     assert.equal(capSlots[0].children[0].textContent, '0.85s');
-    assert.equal(capSlots[1].children[0].textContent, '余 44%');
+    assert.ok(capSlots[1].querySelector('.wm-bat-wrap'));
+    assert.equal(capSlots[1].getAttribute('data-5h-pct'), '44');
 
     // Test hiding middle slot ('none', option index 9) and setting Slot 2 to Claude Weekly (option index 8)
     slot1SelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -1124,7 +1124,8 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     assert.equal(capSeps[1].hasAttribute('hidden'), false, 'Single separator remains between Slot 0 and Slot 2');
     assert.equal(capSeps[1].getAttribute('data-sep-for-rank'), '2');
     assert.equal(capSlots[2].getAttribute('data-vis-rank'), '2');
-    assert.equal(capSlots[2].children[0].textContent, '余 91%');
+    assert.ok(capSlots[2].querySelector('.wm-bat-wrap'));
+    assert.equal(capSlots[2].getAttribute('data-5h-pct'), '91');
 
     // Reset default restores ['context', 'tps', 'quota_auto'] with ring SVG re-attached on Slot 0
     const resetTopbarBtn = settingsPane.querySelector('.btn-ghost-sm');
@@ -1262,23 +1263,120 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     assert.equal(delivered, 1);
     await new Promise((r) => setTimeout(r, 20));
     assert.equal(ctxPctEl.textContent, '25%', 'CDP relay delivered live telemetry without HTTP');
-    assert.equal(speedSegEl.children[0].textContent, '121 t/s');
+    assert.equal(ctxLimitEl.textContent, '256k', 'CDP relay preserves context window total size sublabel');
+    assert.equal(speedSegEl.querySelector('.wm-speed-text').textContent, '121 t/s');
+    assert.equal(speedSegEl.classList.contains('speed-tier-orange'), true, '120.5 t/s uses 100-180 deep orange tier');
     assert.equal(quotaSegEl.hasAttribute('hidden'), false, 'Quota slot stays pre-reserved even when quotas=null');
-    assert.equal(quotaSegEl.children[0].textContent, '余 --%');
+    assert.equal(quotaSegEl.getAttribute('data-5h-pct'), '');
+    assert.equal(quotaSegEl.querySelector('.wm-bat-weekly-fill').attributes.get('stroke-dashoffset'), '100');
     assert.equal(
-      hoverLegendGrid.children[0],
-      firstLegendSlotBefore,
-      'Hover legend updates strictly in-place without DOM node replacement or appendChild'
+      hoverTipEl.querySelector('.progress-track')?.children[0],
+      hoverCtxSegBefore,
+      'Hover context bar updates strictly in-place without DOM node replacement or appendChild'
     );
+    assert.equal(hoverTipEl.querySelector('.speed-compact-value'), hoverSpeedVal);
+    assert.equal(hoverSpeedVal.textContent, '120.5 tok/s');
 
     // Verify in-place bridge port rotation preserves exact DOM host nodes without remount
     fetchShouldFail = false;
     assert.equal(ov.updateBridge({ port: 51234, token: 'rotated-token-456' }), true);
     assert.equal(mockWindow.__AGUsageMonitorBridge.port, 51234);
     assert.equal(mockDocument.getElementById('ag-usage-monitor-capsule'), capsuleHost);
+
+    // Verify navigating back to New Conversation screen ('/') clears context & speed immediately and requests __none__
+    mockLocation.pathname = '/';
+    for (const fn of winListeners.get('popstate') || []) fn({});
+    await new Promise((r) => setTimeout(r, 40));
+    const requestedNewChat =
+      fetchedUrls.some((u) => u.includes('conversationId=__none__')) ||
+      (mockWindow.__AGUsageMonitorBridge.rpcQueue || []).some((item) =>
+        String(item?.path || '').includes('conversationId=__none__')
+      );
+    assert.ok(
+      requestedNewChat,
+      'Navigating to New Chat (/) explicitly requests conversationId=__none__'
+    );
+    assert.equal(ctxPctEl.textContent, '0%', 'New Chat clears stale context usage');
+    assert.equal(ctxLimitEl.textContent, '—', 'New Chat clears context window limit sublabel');
+    assert.equal(speedSegEl.querySelector('.wm-speed-text').textContent, '待命', 'New Chat clears stale token speed');
+    assert.equal(speedSegEl.querySelector('.wm-speed-model').textContent, '—', 'New Chat clears stale model sublabel');
+    assert.equal(quotaSegEl.hasAttribute('hidden'), false, 'New Chat retains account quota battery slot');
   } finally {
     mockWindow.__AGUsageMonitorOverlay?.dispose?.();
     assert.equal(mockDocument.getElementById('ag-usage-monitor-capsule'), null);
     assert.equal(mockDocument.getElementById('ag-usage-monitor-portal'), null);
   }
+});
+
+test('Backend buildTelemetryPayloadInternal does not leak previous conversation on __none__ or unstarted new UUID', async () => {
+  const prevRaw = {
+    trajectory: {
+      steps: [
+        {
+          status: 'CORTEX_STEP_STATUS_DONE',
+          metadata: {
+            createdAt: '2026-01-01T00:00:00Z',
+            finishedGeneratingAt: '2026-01-01T00:00:05Z',
+            modelUsage: {
+              model: 'MODEL_PLACEHOLDER_M418',
+              inputTokens: '1000',
+              cacheReadTokens: '2000',
+              outputTokens: '500',
+              thinkingOutputTokens: '100',
+              responseOutputTokens: '400',
+            },
+          },
+          plannerResponse: { response: 'done' },
+        },
+      ],
+      generatorMetadata: [
+        {
+          stepIndices: [0],
+          chatModel: {
+            timeToFirstToken: '1s',
+            streamingDuration: '4s',
+            chatStartMetadata: {
+              contextWindowMetadata: {
+                tokenBreakdown: {
+                  groups: [{ type: 'TOKEN_TYPE_CHAT_MESSAGES', numTokens: 51200 }],
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  };
+
+  const h = backendHarness({
+    summaries: {
+      'hist-conv-1': {
+        stepCount: 1,
+        lastModifiedTime: '2026-01-01T00:00:05Z',
+        status: 'IDLE',
+        annotations: { title: 'Previous Chat' },
+      },
+    },
+    trajectories: {
+      'hist-conv-1': prevRaw,
+    },
+  });
+
+  const emptyScreenPayload = await h.buildTelemetryPayloadInternal('__none__', false, {});
+  assert.equal(emptyScreenPayload.activeConversation.cascadeId, null);
+  assert.equal(emptyScreenPayload.activeConversation.stepCount, 0);
+  assert.equal(emptyScreenPayload.activeConversation.latestTokPerSec, null);
+  assert.equal(emptyScreenPayload.activeConversation.context.usedPct, 0);
+
+  const brandNewUuidPayload = await h.buildTelemetryPayloadInternal('new-unstarted-uuid', false, {});
+  assert.equal(brandNewUuidPayload.activeConversation.cascadeId, 'new-unstarted-uuid');
+  assert.equal(brandNewUuidPayload.activeConversation.stepCount, 0);
+  assert.equal(brandNewUuidPayload.activeConversation.latestTokPerSec, null);
+  assert.equal(brandNewUuidPayload.activeConversation.context.usedPct, 0);
+
+  const defaultPayload = await h.buildTelemetryPayloadInternal('', false, {});
+  assert.equal(defaultPayload.activeConversation.cascadeId, 'hist-conv-1');
+  assert.equal(defaultPayload.activeConversation.stepCount, 1);
+  assert.ok(defaultPayload.activeConversation.latestTokPerSec > 0);
+  assert.ok(defaultPayload.activeConversation.context.usedPct > 0);
 });

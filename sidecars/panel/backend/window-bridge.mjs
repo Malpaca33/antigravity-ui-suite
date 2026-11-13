@@ -655,7 +655,7 @@ export function createWindowBridgeController(options) {
         let initialTelemetry = null;
         try {
           const routeMatch = String(target.url || '').match(/\/c\/([a-f0-9-]{36})(?:\/|$)/i);
-          const targetConvId = routeMatch ? routeMatch[1] : '';
+          const targetConvId = routeMatch ? routeMatch[1] : '__none__';
           const initOut = await handleApiRequest('/api/telemetry', 'GET', {
             conversationId: targetConvId,
             range: 'today',

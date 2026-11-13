@@ -128,8 +128,129 @@ export const CTX_CHANNEL_DEFS = [
   },
 ];
 
+const THIRD_PARTY_QUOTA_RE = /claude|gpt|anthropic|openai|3p|sonnet|opus|haiku/i;
+const BATTERY_CELL_COUNT = 7;
+const BATTERY_STEP_PCT = 100 / BATTERY_CELL_COUNT;
+
 /**
- * 归一化动态配额池列表；在官方配额尚未返回时回退预占 Gemini 与 Claude & GPT 两个标准池槽位。
+ * 创建精简单行实时速度卡片（仅展示实时生成速度与当前模型）。
+ */
+export function createCompactSpeedCard() {
+  const pulseDot = createSvgIcon('dot', { size: 9 });
+  const labelEl = h('span', { className: 'speed-compact-label', text: '实时速度' });
+  const modelEl = h('span', { className: 'speed-compact-model', text: '模型未知' });
+  const valEl = h('strong', { className: 'speed-compact-value text-mono', text: '—' });
+
+  const el = h('section', { className: 'panel speed-compact-panel', 'aria-label': '实时速度' }, [
+    h('div', { className: 'speed-compact-row' }, [
+      h('div', { className: 'speed-compact-left' }, [pulseDot, labelEl, modelEl]),
+      valEl,
+    ]),
+  ]);
+
+  return { el, refs: { pulseDot, labelEl, modelEl, valEl } };
+}
+
+/**
+ * 格式化顶栏实时速度下方的一行紧凑模型小字（如 "Hydrogen 4-high" / "Hydrogen 4-xhigh"）。
+ */
+export function formatTopbarModelSublabel(active, showUpstream = false) {
+  const safe = active || {};
+  if (showUpstream && safe.activeModelUpstream) {
+    return String(safe.activeModelUpstream).trim();
+  }
+  const raw = String(safe.activeModelLabel || safe.activeModelShort || '').trim();
+  if (!raw || raw === '模型未知') return '—';
+  const cleaned = raw.replace(/\s*\[自动压缩\]\s*$/i, '').trim();
+  const gemMatch = cleaned.match(
+    /^Gemini\s+(\d+(?:\.\d+)?)\s+([A-Za-z0-9._-]+)(?:\s*\(([^)]+)\))?$/i
+  );
+  if (gemMatch) {
+    const [, ver, family, tier] = gemMatch;
+    return tier ? `${family} ${ver}-${tier.toLowerCase()}` : `${family} ${ver}`;
+  }
+  const tierMatch = cleaned.match(/^(.+?)\s*\(([^)]+)\)$/);
+  if (tierMatch) {
+    return `${tierMatch[1].trim()}-${tierMatch[2].trim().toLowerCase()}`;
+  }
+  return cleaned;
+}
+
+/**
+ * 同步精简单行实时速度卡片数据。
+ */
+export function syncCompactSpeedCard(refs, active, { hasSubagents = false, showUpstream = false, isRunning = false } = {}) {
+  const safeActive = active || {};
+  const activeModelDisplay =
+    (showUpstream
+      ? safeActive.activeModelUpstream || safeActive.activeModelShort
+      : safeActive.activeModelShort) || '模型未知';
+  const modelAndAgent =
+    hasSubagents && safeActive.activeAgentBadge
+      ? `[${safeActive.activeAgentBadge}] ${activeModelDisplay}`
+      : activeModelDisplay;
+  patchClasses(refs.pulseDot, { 'is-pulsing': Boolean(safeActive.isRunning || isRunning) });
+  patchText(refs.modelEl, modelAndAgent);
+  patchAttr(refs.modelEl, 'title', modelAndAgent);
+  patchText(refs.valEl, formatMetric(safeActive.latestTokPerSec, ' tok/s'));
+}
+
+/**
+ * 创建 7 格分段电量条组件（每格约 14.3%）。
+ */
+function createBatteryMeter() {
+  const cells = Array.from({ length: BATTERY_CELL_COUNT }, () =>
+    h('span', { className: 'battery-cell' })
+  );
+  const body = h('div', { className: 'battery-body' }, cells);
+  const cap = h('span', { className: 'battery-cap', 'aria-hidden': 'true' });
+  const el = h('div', { className: 'battery-meter', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100' }, [
+    body,
+    cap,
+  ]);
+  return { el, cells };
+}
+
+function syncBatteryMeter(battery, remPct, hasData, isPending) {
+  if (!hasData) {
+    for (const cell of battery.cells) {
+      patchClasses(cell, { 'is-filled': false });
+    }
+    patchClasses(battery.el, {
+      'tone-ok': false,
+      'tone-warn': false,
+      'tone-danger': false,
+      'is-empty': true,
+    });
+    patchAttr(battery.el, 'aria-valuenow', '0');
+    patchAttr(battery.el, 'title', isPending ? '读取中...' : '暂无数据');
+    return;
+  }
+  const clamped = Math.max(0, Math.min(100, Number(remPct)));
+  const filledCount =
+    clamped <= 0 ? 0 : Math.min(BATTERY_CELL_COUNT, Math.max(1, Math.round(clamped / BATTERY_STEP_PCT)));
+  for (let i = 0; i < BATTERY_CELL_COUNT; i += 1) {
+    patchClasses(battery.cells[i], { 'is-filled': i < filledCount });
+  }
+  const isDanger = clamped <= 15;
+  const isWarn = !isDanger && clamped < 43;
+  const isOk = !isDanger && !isWarn;
+  patchClasses(battery.el, {
+    'tone-ok': isOk,
+    'tone-warn': isWarn,
+    'tone-danger': isDanger,
+    'is-empty': false,
+  });
+  patchAttr(battery.el, 'aria-valuenow', String(Math.round(clamped)));
+  patchAttr(
+    battery.el,
+    'title',
+    `剩余 ${clamped.toFixed(1)}%（${filledCount}/7 格，每格约 14%）`
+  );
+}
+
+/**
+ * 归一化动态配额池列表：仅保留 Gemini 系列配额池（过滤 Claude & GPT），默认预占 Gemini 标准池。
  *
  * @param {object|null|undefined} quotas
  * @param {number} minuteTick
@@ -139,25 +260,28 @@ export const CTX_CHANNEL_DEFS = [
 export function buildQuotaPoolItems(quotas, minuteTick = 0, { isPending = false } = {}) {
   const safeQuotas = quotas || {};
   const activePool = safeQuotas.activePool || {};
-  const rawPools =
+  const sourcePools =
     Array.isArray(safeQuotas.pools) && safeQuotas.pools.length > 0
-      ? safeQuotas.pools
-      : [
-          { poolKey: 'Gemini', poolLabel: 'Gemini', family: 'Gemini' },
-          { poolKey: 'Claude & GPT', poolLabel: 'Claude & GPT', family: 'Claude & GPT' },
-        ];
+      ? safeQuotas.pools.filter(
+          (p) => !THIRD_PARTY_QUOTA_RE.test(`${p?.poolKey || ''} ${p?.poolLabel || ''} ${p?.family || ''}`)
+        )
+      : [];
+  const rawPools =
+    sourcePools.length > 0
+      ? sourcePools
+      : [{ poolKey: 'Gemini', poolLabel: 'Gemini', family: 'Gemini' }];
   const weekly = safeQuotas.weekly || {};
+  const poolCount = rawPools.length;
   const poolItems = rawPools.map((p) => {
-    const key = p.poolKey || p.family || p.poolLabel || 'Other';
+    const key = p.poolKey || p.family || p.poolLabel || 'Gemini';
     const poolLabel = p.poolLabel || p.family || key;
     const isActivePool =
       Boolean(activePool.family) &&
-      (activePool.poolKey === key ||
-        activePool.family === p.family ||
-        (key === 'Claude & GPT' && ['Claude', 'GPT'].includes(activePool.family)));
+      (activePool.poolKey === key || activePool.family === p.family);
     return {
       key,
       poolLabel,
+      poolCount,
       poolData: p,
       fallbackWeekly: weekly,
       isActivePool,
@@ -176,54 +300,41 @@ export function buildQuotaPoolItems(quotas, minuteTick = 0, { isPending = false 
 }
 
 /**
- * 创建单个配额池的 DOM 行结构，内含 5h 限额与每周限额两个可独立显隐的子窗口进度条。
+ * 创建单个配额池的紧凑 7 格电量行结构，内含 5h 窗口与每周限额两个可独立显隐的子行。
  */
 export function createPoolQuotaRow() {
-  const title5h = h('span', { text: '5h 限额' });
-  const meta5h = h('span', { className: 'panel-meta text-mono', text: '--' });
-  const fill5h = h('div', { className: 'progress-fill' });
-  const row5h = h('div', { style: 'display: flex; flex-direction: column; gap: 4px;' }, [
-    h('div', { className: 'panel-header' }, [title5h, meta5h]),
-    h('div', { className: 'progress-track' }, [fill5h]),
+  const title5h = h('span', { className: 'quota-win-label', text: '5h 窗口' });
+  const battery5h = createBatteryMeter();
+  const meta5h = h('span', { className: 'quota-win-meta text-mono', text: '--' });
+  const row5h = h('div', { className: 'quota-battery-row' }, [
+    title5h,
+    h('div', { className: 'quota-battery-right' }, [battery5h.el, meta5h]),
   ]);
 
-  const titleWk = h('span', { text: '每周限额' });
-  const metaWk = h('span', { className: 'panel-meta text-mono', text: '--' });
-  const fillWk = h('div', { className: 'progress-fill' });
-  const rowWk = h('div', { style: 'display: flex; flex-direction: column; gap: 4px;' }, [
-    h('div', { className: 'panel-header' }, [titleWk, metaWk]),
-    h('div', { className: 'progress-track' }, [fillWk]),
+  const titleWk = h('span', { className: 'quota-win-label', text: '每周限额' });
+  const batteryWk = createBatteryMeter();
+  const metaWk = h('span', { className: 'quota-win-meta text-mono', text: '--' });
+  const rowWk = h('div', { className: 'quota-battery-row' }, [
+    titleWk,
+    h('div', { className: 'quota-battery-right' }, [batteryWk.el, metaWk]),
   ]);
 
-  const el = h('div', { style: 'display: flex; flex-direction: column; gap: 8px;' }, [
-    row5h,
-    rowWk,
-  ]);
+  const el = h('div', { className: 'quota-pool-group' }, [row5h, rowWk]);
 
   return {
     el,
-    refs: { row5h, title5h, meta5h, fill5h, rowWk, titleWk, metaWk, fillWk },
+    refs: { row5h, title5h, battery5h, meta5h, rowWk, titleWk, batteryWk, metaWk },
   };
 }
 
 /**
- * 同步单个配额池行的 5h 与每周窗口状态：
- * - 对于仅有周限额的独立配额池（例如 Google AI Pro 账号下的 Argon 池或 Plus 档位）自动隐藏 5h 行；
- * - 对于仅有 5h 限额的配额池自动隐藏每周行；
- * - 若两个窗口均无数据（首次加载或拉取失败），同时保留两行以维持预占高度不跳动。
+ * 同步单个配额池行的 5h 与每周窗口 7 格电量状态（仅展示余量百分比与重置倒计时）。
  */
 export function syncPoolQuotaRow(refs, item, idx, rowEl) {
-  const { poolData, poolLabel, fallbackWeekly, isActivePool, isPending } = item;
-  patchAttr(
-    rowEl,
-    'style',
-    idx === 0
-      ? 'display: flex; flex-direction: column; gap: 8px;'
-      : 'display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-hairline);'
-  );
+  const { poolData, poolLabel, poolCount = 1, fallbackWeekly, isActivePool, isPending } = item;
+  patchClasses(rowEl, { 'has-divider': idx > 0 });
 
   const has5h = poolData?.usedPct != null && poolData?.remainingPct != null;
-  const used5hVal = has5h ? Number(poolData.usedPct) : 0;
   const rem5hVal = has5h ? Number(poolData.remainingPct) : 0;
 
   const useCustomWeekly = Boolean(isActivePool && fallbackWeekly?.isOfficial === false);
@@ -237,10 +348,8 @@ export function syncPoolQuotaRow(refs, item, idx, rowEl) {
     ? fallbackWeekly?.resetTime || poolData?.weeklyResetTime
     : poolData?.weeklyResetTime || (isActivePool ? fallbackWeekly?.resetTime : null);
   const hasWk = wkUsedRaw != null && wkRemRaw != null;
-  const usedWkVal = hasWk ? Number(wkUsedRaw) : 0;
   const remWkVal = hasWk ? Number(wkRemRaw) : 0;
 
-  // 在单窗口配额池（如 Pro 账号独立 Argon 周配额池或仅 5h 池）中隐藏不适用的另一窗口
   const hide5h = !has5h && hasWk;
   const hideWk = !hasWk && has5h;
   refs.row5h.hidden = hide5h;
@@ -248,41 +357,38 @@ export function syncPoolQuotaRow(refs, item, idx, rowEl) {
   refs.rowWk.hidden = hideWk;
   refs.rowWk.style.display = hideWk ? 'none' : 'flex';
 
-  const fallbackMetaText = isPending ? '读取中...' : '获取失败 (--%)';
+  const shortPoolTag = poolLabel.replace(/^Gemini\s*4\s*/i, '');
+  const label5h = poolCount > 1 ? `5h · ${shortPoolTag}` : '5h 窗口';
+  const labelWk =
+    isActivePool && fallbackWeekly?.isOfficial === false && fallbackWeekly?.title
+      ? fallbackWeekly.title
+      : poolCount > 1
+        ? `周 · ${shortPoolTag}`
+        : '每周限额';
 
-  patchText(refs.title5h, `5h 限额 (${poolLabel})`);
+  const fallbackMeta = isPending ? '读取中' : '--%';
+
+  patchText(refs.title5h, label5h);
+  syncBatteryMeter(refs.battery5h, rem5hVal, has5h, isPending);
   patchText(
     refs.meta5h,
     has5h
-      ? `${formatCountdown(poolData.resetTime)} · 已用 ${used5hVal.toFixed(1)}% (余 ${rem5hVal.toFixed(1)}%)`
-      : fallbackMetaText
+      ? `余 ${Math.round(rem5hVal)}% · ${formatCountdown(poolData.resetTime)}`
+      : fallbackMeta
   );
-  patchStyleVar(refs.fill5h, '--fill-w', `${Math.min(100, used5hVal)}%`);
-  patchClasses(refs.fill5h, {
-    'tone-warn': used5hVal >= 60 && used5hVal < 85,
-    'tone-danger': used5hVal >= 85,
-  });
 
-  const customTitle =
-    isActivePool && fallbackWeekly?.isOfficial === false && fallbackWeekly?.title
-      ? fallbackWeekly.title
-      : `每周限额 (${poolLabel})`;
-  patchText(refs.titleWk, customTitle);
+  patchText(refs.titleWk, labelWk);
+  syncBatteryMeter(refs.batteryWk, remWkVal, hasWk, isPending);
   patchText(
     refs.metaWk,
     hasWk
-      ? `${formatCountdown(wkResetRaw)} · 已用 ${usedWkVal.toFixed(1)}% (余 ${remWkVal.toFixed(1)}%)`
-      : fallbackMetaText
+      ? `余 ${Math.round(remWkVal)}% · ${formatCountdown(wkResetRaw)}`
+      : fallbackMeta
   );
-  patchStyleVar(refs.fillWk, '--fill-w', `${Math.min(100, usedWkVal)}%`);
-  patchClasses(refs.fillWk, {
-    'tone-warn': usedWkVal >= 60 && usedWkVal < 85,
-    'tone-danger': usedWkVal >= 85,
-  });
 }
 
 export function quotaPoolRowSig(item, idx) {
-  return `${idx}:${item.poolLabel}:${item.isActivePool}:${Boolean(item.isPending)}:${item.minuteTick}:${item.poolData?.usedPct}:${item.poolData?.remainingPct}:${item.poolData?.resetTime}:${item.poolData?.weeklyUsedPct}:${item.poolData?.weeklyRemainingPct}:${item.poolData?.weeklyResetTime}:${item.fallbackWeekly?.isOfficial}:${item.fallbackWeekly?.usedPct}:${item.fallbackWeekly?.remainingPct}:${item.fallbackWeekly?.resetTime}:${item.fallbackWeekly?.title}`;
+  return `${idx}:${item.poolLabel}:${item.poolCount}:${item.isActivePool}:${Boolean(item.isPending)}:${item.minuteTick}:${item.poolData?.usedPct}:${item.poolData?.remainingPct}:${item.poolData?.resetTime}:${item.poolData?.weeklyUsedPct}:${item.poolData?.weeklyRemainingPct}:${item.poolData?.weeklyResetTime}:${item.fallbackWeekly?.isOfficial}:${item.fallbackWeekly?.usedPct}:${item.fallbackWeekly?.remainingPct}:${item.fallbackWeekly?.resetTime}:${item.fallbackWeekly?.title}`;
 }
 
 export const LiveOverviewView = defineComponent({
@@ -462,59 +568,16 @@ export const LiveOverviewView = defineComponent({
       };
     }
 
-    // --- 1. 4 格实时测速矩阵 (实时吞吐 / 首Token / 会话均速 / 本步消费) ---
-    const tpsVal = h('strong', { className: 'cell-value accent-speed', text: '—' });
-    const tpsSub = h('span', { className: 'cell-sub', text: '模型未知' });
-    const pulseDot = createSvgIcon('dot', { size: 10 });
+    // --- 1. 精简单行实时速度卡片 ---
+    const speedCard = createCompactSpeedCard();
 
-    const ttftVal = h('strong', { className: 'cell-value', text: '—' });
-    const ttftSub = h('span', { className: 'cell-sub', text: '均值 —' });
-
-    const avgVal = h('strong', { className: 'cell-value', text: '—' });
-    const avgSub = h('span', { className: 'cell-sub', text: '有效样本 0/0 步' });
-
-    const costVal = h('strong', { className: 'cell-value', text: '—' });
-    const cacheSub = h('span', { className: 'cell-sub accent-ok', text: '缓存 0% · 累计 $0.00' });
-
-    const matrixEl = h('section', { className: 'telemetry-matrix', 'aria-label': '实时指标' }, [
-      h('div', { className: 'matrix-cell' }, [
-        h('div', { className: 'cell-label' }, [h('span', { text: '输出速度' }), pulseDot]),
-        tpsVal,
-        tpsSub,
-      ]),
-      h('div', { className: 'matrix-cell' }, [
-        h('div', { className: 'cell-label' }, [
-          h('span', { text: '首字延迟' }),
-          createSvgIcon('clock', { size: 11 }),
-        ]),
-        ttftVal,
-        ttftSub,
-      ]),
-      h('div', { className: 'matrix-cell' }, [
-        h('div', { className: 'cell-label' }, [
-          h('span', { text: '平均速度' }),
-          createSvgIcon('pulse', { size: 11 }),
-        ]),
-        avgVal,
-        avgSub,
-      ]),
-      h('div', { className: 'matrix-cell' }, [
-        h('div', { className: 'cell-label' }, [
-          h('span', { text: '本次费用' }),
-          createSvgIcon('bolt', { size: 11 }),
-        ]),
-        costVal,
-        cacheSub,
-      ]),
-    ]);
-
-    // --- 2. 6 段上下文窗口构成面板（自动锚定模型上下文压缩基线 + 方案 B 内嵌独立 256k 窗口检视条） ---
+    // --- 2. 紧凑上下文窗口进度条（隐藏具体 Token 占用量与 10 通道明细） ---
     const ctxAgentBadge = h('span', {
       className: 'agent-badge badge-main',
       hidden: true,
       text: '主代理',
     });
-    const ctxSummaryText = h('span', { className: 'text-mono', text: '0 / 256.0k (0%)' });
+    const ctxSummaryText = h('span', { className: 'text-mono', text: '0%' });
     const ctxSegmentBar = ContextSegmentMeter({ context: {} });
 
     const ctxPillGroup = h('div', { className: 'ctx-pill-group' });
@@ -538,15 +601,14 @@ export const LiveOverviewView = defineComponent({
 
     const ctxLegendGrid = h(
       'div',
-      { className: 'ctx-legend-grid' },
+      { className: 'ctx-legend-grid', hidden: true },
       ctxChannels.map((ch) => ch.itemEl)
     );
-    let lastLegendOrderSig = ctxChannels.map((ch) => ch.key).join(',');
 
-    const ctxPanel = h('section', { className: 'panel' }, [
+    const ctxPanel = h('section', { className: 'panel panel-compact' }, [
       h('div', { className: 'panel-header' }, [
         h('span', { className: 'panel-title' }, [
-          createSvgIcon('layers', { size: 13 }),
+          createSvgIcon('layers', { size: 12 }),
           h('span', { text: '上下文窗口' }),
           ctxAgentBadge,
         ]),
@@ -557,34 +619,27 @@ export const LiveOverviewView = defineComponent({
       ctxLegendGrid,
     ]);
 
-    // --- 3. 官方动态多配额池监控面板 (Gemini / Pro 独立 Argon 池 / Claude & GPT) ---
-    const tierBadge = h('span', { className: 'panel-meta', text: 'Google AI · Pro' });
-    const poolsListEl = h('div', { style: 'display: flex; flex-direction: column; gap: 0;' });
+    // --- 3. 精简 Gemini 7 格电量配额面板 ---
+    const tierBadge = h('span', { className: 'panel-meta', text: 'Gemini' });
+    const poolsListEl = h('div', { className: 'quota-pools-compact' });
 
-    const wkFootLeft = h('span', { className: 'text-muted', text: '本周累计: 0 ($0.00)' });
-    const wkFootRight = h('span', { className: 'text-muted', text: '' });
-
-    const quotaPanel = h('section', { className: 'panel' }, [
+    const quotaPanel = h('section', { className: 'panel panel-compact' }, [
       h('div', { className: 'panel-header' }, [
         h('span', { className: 'panel-title' }, [
-          createSvgIcon('pulse', { size: 13 }),
+          createSvgIcon('pulse', { size: 12 }),
           h('span', { text: '可用额度' }),
         ]),
         tierBadge,
       ]),
       poolsListEl,
-      h('div', { className: 'panel-header', style: 'font-size: 11px; padding-top: 2px;' }, [
-        wkFootLeft,
-        wkFootRight,
-      ]),
     ]);
 
     const overviewInner = h(
       'div',
       {
-        style: 'display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: 2px;',
+        style: 'display: flex; flex-direction: column; gap: 6px; padding-bottom: 2px;',
       },
-      [matrixEl, ctxPanel, quotaPanel, liveActivityBar]
+      [speedCard.el, ctxPanel, quotaPanel, liveActivityBar]
     );
     const viewScrollbar = CustomScrollbar({
       contentEl: overviewInner,
@@ -632,11 +687,21 @@ export const LiveOverviewView = defineComponent({
       const ctx = ctxAgent?.context || active.context || {};
       const quotas = data.quotas || {};
 
-      // 0. 更新多任务实时运行列表（展示所有正在运行的主进程 + 默认主代理缩略 + 默认收起的子代理列表）
+      // 0. 仅展示当前窗口对话及其子代理的实时运行流（不显示跨对话任务）
+      const activeCidLower = String(data.activeConversation?.cascadeId || active.cascadeId || '').toLowerCase();
+      const matchedRunning = Array.isArray(data.runningConversations)
+        ? data.runningConversations.filter((item) =>
+            activeCidLower
+              ? String(item?.cascadeId || '').toLowerCase() === activeCidLower
+              : Boolean(item?.isCurrentSelected)
+          )
+        : [];
+      const currentSubagents = (agents || []).filter((a) => !a.isMain);
+      const currSubRunning = currentSubagents.filter((a) => Boolean(a.isRunning)).length;
       const rawRunningList =
-        Array.isArray(data.runningConversations) && data.runningConversations.length > 0
-          ? data.runningConversations
-          : data.activeConversation?.isRunning || aggregated?.isRunning
+        matchedRunning.length > 0
+          ? matchedRunning
+          : data.activeConversation?.isRunning || aggregated?.isRunning || currSubRunning > 0
             ? [
                 {
                   cascadeId: data.activeConversation?.cascadeId || 'current',
@@ -646,28 +711,26 @@ export const LiveOverviewView = defineComponent({
                   isRunning: true,
                   mainActivity:
                     data.activeConversation?.liveActivity || aggregated?.liveActivity || null,
-                  subagentCount: Math.max(0, agents.length - 1),
-                  runningSubagentCount: agents.filter((a) => !a.isMain && a.isRunning).length,
-                  subagents: agents
-                    .filter((a) => !a.isMain)
-                    .map((s, idx) => ({
-                      cascadeId: s.cascadeId || s.agentId,
-                      index: s.index || idx + 1,
-                      badgeText: s.badgeText || `子${idx + 1}`,
-                      shortLabel: s.shortLabel || `子代理 #${idx + 1}`,
-                      role: s.role || `子代理 #${idx + 1}`,
-                      isRunning: Boolean(s.isRunning),
-                      stepCount: Number(s.stepCount || 0),
-                      lastModifiedMs: s.lastModifiedMs || 0,
-                      liveActivity: s.liveActivity || {
-                        phase: s.isRunning ? 'thinking' : 'done',
-                        label: s.isRunning ? '推理中' : '已完成',
-                        detail: '',
-                        stepProgress: '',
-                        startedAtMs: s.lastModifiedMs || 0,
-                        signature: `${s.agentId}:${s.stepCount || 0}`,
-                      },
-                    })),
+                  subagentCount: currentSubagents.length,
+                  runningSubagentCount: currSubRunning,
+                  subagents: currentSubagents.map((s, idx) => ({
+                    cascadeId: s.cascadeId || s.agentId,
+                    index: s.index || idx + 1,
+                    badgeText: s.badgeText || `子${idx + 1}`,
+                    shortLabel: s.shortLabel || `子代理 #${idx + 1}`,
+                    role: s.role || `子代理 #${idx + 1}`,
+                    isRunning: Boolean(s.isRunning),
+                    stepCount: Number(s.stepCount || 0),
+                    lastModifiedMs: s.lastModifiedMs || 0,
+                    liveActivity: s.liveActivity || {
+                      phase: s.isRunning ? 'thinking' : 'done',
+                      label: s.isRunning ? '推理中' : '已完成',
+                      detail: '',
+                      stepProgress: '',
+                      startedAtMs: s.lastModifiedMs || 0,
+                      signature: `${s.agentId}:${s.stepCount || 0}`,
+                    },
+                  })),
                 },
               ]
             : [];
@@ -860,37 +923,13 @@ export const LiveOverviewView = defineComponent({
         ensureLiveTicker();
       }
 
-      // 1. 更新 4 格实时测速矩阵（展示当前会话全局汇总指标，遵循模型名称格式设置）
+      // 1. 更新精简单行实时速度卡片
       const showUpstream = Boolean(data.settings?.showUpstreamModel);
-      const activeModelDisplay =
-        (showUpstream
-          ? active.activeModelUpstream || active.activeModelShort
-          : active.activeModelShort) || '模型未知';
-      patchClasses(pulseDot, { 'is-pulsing': Boolean(active.isRunning) });
-      patchText(tpsVal, formatMetric(active.latestTokPerSec, ' tok/s'));
-      const reason = speedReasonText(active.latestSpeedReason);
-      const modelAndAgent =
-        hasSubagents && active.activeAgentBadge
-          ? `[${active.activeAgentBadge}] ${activeModelDisplay}`
-          : activeModelDisplay;
-      patchText(tpsSub, reason ? `${modelAndAgent} · ${reason}` : modelAndAgent);
-
-      patchText(ttftVal, formatMetric(active.latestTtftSec, 's'));
-      patchText(ttftSub, `均值 ${formatMetric(active.ttftSummary?.avgSec, 's')}`);
-
-      patchText(avgVal, formatMetric(active.avgTokPerSec, ' tok/s'));
-      patchText(avgSub, `有效 ${sampleSummary(active.speedSummary)}`);
-
-      const stepCost = active.latestStepCostUsd;
-      const hasAnySteps = Number(active.stepCount || 0) > 0;
-      patchText(
-        costVal,
-        !hasAnySteps && stepCost == null ? '—' : formatUsd(stepCost, { precise: true })
-      );
-      patchText(
-        cacheSub,
-        `缓存 ${active.latestCacheHitPct ?? 0}% · 累计 ${formatUsd(active.sessionCostUsd || 0)}`
-      );
+      syncCompactSpeedCard(speedCard.refs, active, {
+        hasSubagents,
+        showUpstream,
+        isRunning: Boolean(active.isRunning),
+      });
 
       // 2. 更新 10 段上下文窗口构成与内嵌上下文窗口检视胶囊条
       patchAttr(ctxAgentBadge, 'hidden', !hasSubagents);
@@ -1014,31 +1053,11 @@ export const LiveOverviewView = defineComponent({
       const totalTokens = Number(ctx.totalTokens || 0);
       const usedPct =
         limitTokens > 0 ? Math.min(100, +((totalTokens / limitTokens) * 100).toFixed(1)) : 0;
-      patchText(
-        ctxSummaryText,
-        `${formatTokens(totalTokens)} / ${formatTokens(limitTokens)} (${usedPct}%)`
-      );
+      patchText(ctxSummaryText, `${usedPct}%`);
       ctxSegmentBar.setProps({ context: { ...ctx, limitTokens, usedPct } });
-      const scoredChannels = ctxChannels.map((ch) => {
-        const val = ch.getValue(ctx);
-        patchText(ch.valEl, formatTokens(val));
-        return { ch, val };
-      });
-      scoredChannels.sort((a, b) => b.val - a.val || a.ch.defaultOrder - b.ch.defaultOrder);
-      const nextLegendOrderSig = scoredChannels.map((x) => x.ch.key).join(',');
-      if (nextLegendOrderSig !== lastLegendOrderSig) {
-        lastLegendOrderSig = nextLegendOrderSig;
-        for (const { ch } of scoredChannels) {
-          ctxLegendGrid.appendChild(ch.itemEl);
-        }
-      }
 
-      // 3. 更新动态配额池列表（支持 Gemini、Pro 独立 Argon 池、Claude & GPT 等）
-      patchText(
-        tierBadge,
-        `${data.account?.tierName || 'Google AI'} · ${data.account?.planName || 'Pro'}`
-      );
-      const weekly = quotas.weekly || {};
+      // 3. 更新精简 Gemini 7 格电量配额池列表
+      patchText(tierBadge, 'Gemini');
       const minuteTick = Math.floor(Date.now() / 30000);
       const poolItems = buildQuotaPoolItems(quotas, minuteTick);
 
@@ -1048,17 +1067,6 @@ export const LiveOverviewView = defineComponent({
         createRow: createPoolQuotaRow,
         updateRow: syncPoolQuotaRow,
       });
-
-      patchText(
-        wkFootLeft,
-        `本周累计: ${formatTokens(weekly.tokens || 0)} (${formatUsd(weekly.costUsd || 0)})`
-      );
-      patchText(
-        wkFootRight,
-        data.account?.aiCredits > 0
-          ? `AI 积分: ${data.account.aiCredits}`
-          : `本周调用: ${weekly.calls || 0} 次`
-      );
 
       ensureCountdownTicker();
       viewScrollbar.refresh();

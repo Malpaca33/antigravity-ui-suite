@@ -511,14 +511,16 @@ export async function fetchTelemetry({ force = false } = {}) {
       const liveRouteId = extractHostRouteCascadeId();
       if (liveRouteId !== st.hostRouteConversationId) {
         const patch = { hostRouteConversationId: liveRouteId };
-        if (liveRouteId && st.selectedConversationId && st.selectedConversationId !== liveRouteId) {
+        if (st.selectedConversationId && st.selectedConversationId !== liveRouteId) {
           patch.selectedConversationId = '';
         }
         telemetryStore.setState(patch);
       }
     }
     const curSt = telemetryStore.getState();
-    const effectiveConvId = curSt.selectedConversationId || curSt.hostRouteConversationId || '';
+    const rawEffectiveConvId = curSt.selectedConversationId || curSt.hostRouteConversationId || '';
+    const effectiveConvId =
+      rawEffectiveConvId || (isWindowOverlayMode() ? '__none__' : '');
     const params = new URLSearchParams();
     if (effectiveConvId) {
       params.set('conversationId', effectiveConvId);

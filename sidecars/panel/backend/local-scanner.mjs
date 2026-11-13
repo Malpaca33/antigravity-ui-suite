@@ -1175,18 +1175,28 @@ export async function enumerateAndSyncConversations({
       (a.groupLastModifiedMs || a.lastModifiedMs || 0)
   );
 
-  // 选定当前活跃根会话：若指定了有效 requestedConvId（支持根会话 ID 或子代理 ID）则优先使用，否则取最近修改的根会话
-  const activeConvSummary =
-    (reqLower &&
-      (conversations.find((c) => c.cascadeId.toLowerCase() === reqLower) ||
-        conversations.find((c) =>
-          (c.subagents || []).some((s) => s.cascadeId.toLowerCase() === reqLower)
-        ))) ||
-    conversations[0] ||
-    null;
+  // 选定当前活跃根会话：若显式指定 '__none__' / 'none'（如宿主处于新开对话页）则保持空会话；
+  // 若指定了具体 requestedConvId 且尚未在会话列表出现，也不回退到最近历史会话；仅未指定时默认取最近修改的根会话
   const safeReqId =
-    requestedConvId && !/[\\/]|\.\./.test(String(requestedConvId)) ? requestedConvId : null;
-  const activeCascadeId = activeConvSummary?.cascadeId || safeReqId || null;
+    requestedConvId && !/[\\/]|\.\./.test(String(requestedConvId)) ? String(requestedConvId) : null;
+  const reqKeyLower = String(reqLower || '').trim();
+  const explicitEmpty = reqKeyLower === '__none__' || reqKeyLower === 'none';
+  const matchedConvSummary =
+    !explicitEmpty && reqKeyLower
+      ? conversations.find((c) => c.cascadeId.toLowerCase() === reqKeyLower) ||
+        conversations.find((c) =>
+          (c.subagents || []).some((s) => s.cascadeId.toLowerCase() === reqKeyLower)
+        ) ||
+        null
+      : null;
+  const activeConvSummary = explicitEmpty
+    ? null
+    : reqKeyLower
+      ? matchedConvSummary
+      : conversations[0] || null;
+  const activeCascadeId = explicitEmpty
+    ? null
+    : activeConvSummary?.cascadeId || safeReqId || null;
 
   return {
     conversations,

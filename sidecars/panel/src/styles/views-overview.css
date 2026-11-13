@@ -20,6 +20,159 @@
   border-radius: var(--radius-sm);
 }
 
+.panel.panel-compact {
+  gap: 6px;
+  padding: 7px 10px;
+}
+
+.speed-compact-panel {
+  padding: 7px 10px;
+}
+
+.speed-compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.speed-compact-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  color: var(--metric-speed);
+}
+
+.speed-compact-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.speed-compact-model {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.speed-compact-value {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--metric-speed);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.quota-pools-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quota-pool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quota-pool-group.has-divider {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.quota-battery-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.quota-win-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.quota-battery-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.quota-win-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 92px;
+  text-align: right;
+}
+
+.battery-meter {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.battery-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--surface-subtle);
+}
+
+.battery-cell {
+  width: 7px;
+  height: 8px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+  transition: background-color var(--dur-fast) var(--ease-fast);
+}
+
+.battery-cap {
+  width: 2.5px;
+  height: 6px;
+  margin-left: 1px;
+  border-radius: 0 1.5px 1.5px 0;
+  background: var(--border-strong);
+}
+
+.battery-meter.tone-ok .battery-cell.is-filled {
+  background: var(--metric-ok);
+}
+
+.battery-meter.tone-warn .battery-cell.is-filled {
+  background: var(--metric-warn);
+}
+
+.battery-meter.tone-danger .battery-cell.is-filled {
+  background: var(--metric-danger);
+}
+
+.battery-meter.tone-danger .battery-body {
+  border-color: color-mix(in srgb, var(--metric-danger) 65%, var(--border-strong));
+}
+
+.battery-meter.tone-danger .battery-cap {
+  background: color-mix(in srgb, var(--metric-danger) 65%, var(--border-strong));
+}
+
 .panel-header {
   display: flex;
   align-items: center;
