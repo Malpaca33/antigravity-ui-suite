@@ -1,0 +1,10 @@
+{
+  "name": "font-studio",
+  "displayName": "Font Studio",
+  "version": "1.0.0",
+  "description": "按界面区域（侧栏/正文/输入框/代码）实时预览并一键切换 Antigravity 中英文字体与字重。",
+  "suggestedPrompts": [
+    "打开字体工坊面板",
+    "调整 Antigravity 正文与输入框字体"
+  ]
+}

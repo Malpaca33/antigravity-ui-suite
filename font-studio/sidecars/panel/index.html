@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Font Studio</title>
+<style>
+  :root {
+    --bg: #E5E5C2;
+    --card: rgba(255, 255, 255, 0.42);
+    --card-inner: rgba(229, 229, 194, 0.55);
+    --border: rgba(79, 56, 41, 0.16);
+    --text: #3B291D;
+    --muted: rgba(79, 56, 41, 0.68);
+    --accent: #C35E0A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Google Sans Flex', 'Google Sans', 'PingFang SC', system-ui, sans-serif;
+    padding: 16px 16px 84px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  header span {
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .group {
+    margin-bottom: 9px;
+  }
+  .group-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .chip {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    user-select: none;
+  }
+  .chip:hover {
+    background: rgba(255, 255, 255, 0.82);
+  }
+  .chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #FFFDF8;
+  }
+  .preview {
+    margin-top: 8px;
+    background: var(--card-inner);
+    border: 1px solid rgba(79, 56, 41, 0.12);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: #2A1D14;
+  }
+
+  .footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(229, 229, 194, 0.92);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+    padding: 10px 16px;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    flex: 1;
+    appearance: none;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  .btn:hover { opacity: 0.9; }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #FFFDF8;
+  }
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.55);
+    color: var(--text);
+  }
+  .status {
+    margin-top: 5px;
+    font-size: 11.5px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 16px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Font Studio</h1>
+    <span>Live Preview</span>
+  </header>
+
+  <section class="card">
+    <div class="card-head"><div class="card-title">1. 侧栏与界面 · Sidebar &amp; UI</div></div>
+    <div class="group">
+      <div class="group-label">英文 · English</div>
+      <div class="chips" data-key="ui.en">
+        <button type="button" class="chip" data-val="Google Sans">Google Sans</button>
+        <button type="button" class="chip" data-val="Anthropic Sans">Anthropic Sans</button>
+        <button type="button" class="chip" data-val="Inter">Inter</button>
+        <button type="button" class="chip" data-val="System UI">System UI</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-label">中文 · Chinese</div>
+      <div class="chips" data-key="ui.zh">
+        <button type="button" class="chip" data-val="PingFang SC Medium">PingFang SC Medium</button>
+        <button type="button" class="chip" data-val="PingFang SC Regular">PingFang SC Regular</button>
+        <button type="button" class="chip" data-val="PingFang SC Semibold">PingFang SC Semibold</button>
+        <button type="button" class="chip" data-val="更纱 UI SC">Sarasa UI SC</button>
+      </div>
+    </div>
+    <div id="prev-ui" class="preview">Automations · Customizations · 侧栏导航与按钮预览</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div class="card-title">2. 对话正文 · Chat Body</div></div>
+    <div class="group">
+      <div class="group-label">英文 · English</div>
+      <div class="chips" data-key="prose.en">
+        <button type="button" class="chip" data-val="Anthropic Serif Text">Anthropic Serif Text</button>
+        <button type="button" class="chip" data-val="Anthropic Serif Web">Anthropic Serif Web</button>
+        <button type="button" class="chip" data-val="Anthropic Sans">Anthropic Sans</button>
+        <button type="button" class="chip" data-val="Google Sans">Google Sans</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-label">中文 · Chinese</div>
+      <div class="chips" data-key="prose.zh">
+        <button type="button" class="chip" data-val="PingFang SC Medium">PingFang SC Medium</button>
+        <button type="button" class="chip" data-val="PingFang SC Regular">PingFang SC Regular</button>
+        <button type="button" class="chip" data-val="华文宋体 Regular">Songti SC Regular</button>
+        <button type="button" class="chip" data-val="华文宋体 Bold">Songti SC Bold</button>
+        <button type="button" class="chip" data-val="更纱黑体 Slab SC">Sarasa Mono Slab SC</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-label">字重 · Weight</div>
+      <div class="chips" data-key="prose.weight">
+        <button type="button" class="chip" data-val="400">400 Regular</button>
+        <button type="button" class="chip" data-val="500">500 Medium</button>
+        <button type="button" class="chip" data-val="600">600 Semibold</button>
+      </div>
+    </div>
+    <div id="prev-prose" class="preview">Anthropic Serif &amp; Chinese: 英文带衬线笔锋，中文保持清晰对比与阅读节奏。</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div class="card-title">3. 底部输入框 · Input Box</div></div>
+    <div class="group">
+      <div class="group-label">英文 · English</div>
+      <div class="chips" data-key="input.en">
+        <button type="button" class="chip" data-val="Google Sans">Google Sans</button>
+        <button type="button" class="chip" data-val="Anthropic Sans">Anthropic Sans</button>
+        <button type="button" class="chip" data-val="System UI">System UI</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-label">中文 · Chinese</div>
+      <div class="chips" data-key="input.zh">
+        <button type="button" class="chip" data-val="PingFang SC Medium">PingFang SC Medium</button>
+        <button type="button" class="chip" data-val="PingFang SC Regular">PingFang SC Regular</button>
+        <button type="button" class="chip" data-val="更纱黑体 Slab SC">Sarasa Mono Slab SC</button>
+      </div>
+    </div>
+    <div id="prev-input" class="preview">Ask anything, @ to mention · 输入框中英混排预览</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div class="card-title">4. 代码与终端 · Code &amp; Terminal</div></div>
+    <div class="group">
+      <div class="group-label">等宽 · Monospace</div>
+      <div class="chips" data-key="code.font">
+        <button type="button" class="chip" data-val="Anthropic Mono Variable">Anthropic Mono Variable</button>
+        <button type="button" class="chip" data-val="Anthropic Mono Web">Anthropic Mono Web</button>
+        <button type="button" class="chip" data-val="Sarasa Mono Slab SC">Sarasa Mono Slab SC</button>
+        <button type="button" class="chip" data-val="System Mono">System Mono</button>
+      </div>
+    </div>
+    <div id="prev-code" class="preview" style="font-size:12px;">const font = "Anthropic Mono Variable"; // 代码与注释预览</div>
+  </section>
+
+  <div class="footer">
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" id="btn-reset">Reset</button>
+      <button type="button" class="btn btn-primary" id="btn-apply">Apply</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+<script>
+  const state = {
+    ui: { en: 'Google Sans', zh: 'PingFang SC Medium' },
+    prose: { en: 'Anthropic Serif Text', zh: 'PingFang SC Medium', weight: '500' },
+    input: { en: 'Google Sans', zh: 'PingFang SC Medium' },
+    code: { font: 'Anthropic Mono Variable' },
+  };
+
+  const EN_MAP = {
+    'Google Sans': `'Google Sans Flex', 'Google Sans', system-ui`,
+    'Anthropic Sans': `'Anthropic Sans Web Text', 'Anthropic Sans Text', system-ui`,
+    'Anthropic Serif Text': `'Anthropic Serif Text', 'Anthropic Serif Web Text', Georgia`,
+    'Anthropic Serif Web': `'Anthropic Serif Web Text', 'Anthropic Serif Text', Georgia`,
+    'Inter': `'Inter', system-ui`,
+    'System UI': `system-ui, -apple-system`,
+  };
+  const ZH_MAP = {
+    'PingFang SC Medium': { name: 'PingFang SC', weight: 500 },
+    'PingFang SC Regular': { name: 'PingFang SC', weight: 400 },
+    'PingFang SC Semibold': { name: 'PingFang SC', weight: 600 },
+    '华文宋体 Regular': { name: 'Songti SC', weight: 400 },
+    '华文宋体 Bold': { name: 'Songti SC', weight: 700 },
+    '更纱黑体 Slab SC': { name: 'Sarasa Mono Slab SC', weight: 400 },
+    '更纱 UI SC': { name: 'Sarasa UI SC', weight: 400 },
+  };
+  const CODE_MAP = {
+    'Anthropic Mono Variable': `'Anthropic Mono Variable', ui-monospace, monospace`,
+    'Anthropic Mono Web': `'Anthropic Mono Web', ui-monospace, monospace`,
+    'Sarasa Mono Slab SC': `'Sarasa Mono Slab SC', ui-monospace, monospace`,
+    'System Mono': `ui-monospace, SFMono-Regular, Menlo, monospace`,
+  };
+
+  function getByPath(obj, path) {
+    return path.split('.').reduce((a, k) => a?.[k], obj);
+  }
+  function setByPath(obj, path, val) {
+    const keys = path.split('.');
+    let cur = obj;
+    for (let i = 0; i < keys.length - 1; i++) cur = cur[keys[i]];
+    cur[keys[keys.length - 1]] = val;
+  }
+
+  function renderChips() {
+    document.querySelectorAll('.chips[data-key]').forEach((group) => {
+      const current = String(getByPath(state, group.dataset.key) ?? '');
+      group.querySelectorAll('.chip').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.val === current);
+      });
+    });
+    updatePreviews();
+  }
+
+  function updatePreviews() {
+    const uiZh = ZH_MAP[state.ui.zh] || ZH_MAP['PingFang SC Medium'];
+    document.getElementById('prev-ui').style.fontFamily = `${EN_MAP[state.ui.en]}, '${uiZh.name}', sans-serif`;
+    document.getElementById('prev-ui').style.fontWeight = uiZh.weight;
+
+    const proseZh = ZH_MAP[state.prose.zh] || ZH_MAP['PingFang SC Medium'];
+    document.getElementById('prev-prose').style.fontFamily = `${EN_MAP[state.prose.en]}, '${proseZh.name}', serif`;
+    document.getElementById('prev-prose').style.fontWeight = state.prose.weight;
+
+    const inZh = ZH_MAP[state.input.zh] || ZH_MAP['PingFang SC Medium'];
+    document.getElementById('prev-input').style.fontFamily = `${EN_MAP[state.input.en]}, '${inZh.name}', sans-serif`;
+    document.getElementById('prev-input').style.fontWeight = inZh.weight;
+
+    document.getElementById('prev-code').style.fontFamily = CODE_MAP[state.code.font];
+  }
+
+  document.querySelectorAll('.chips[data-key]').forEach((group) => {
+    group.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      setByPath(state, group.dataset.key, chip.dataset.val);
+      renderChips();
+    });
+  });
+
+  async function applyConfig(enabled) {
+    const status = document.getElementById('status');
+    status.textContent = '正在应用 · Applying...';
+    try {
+      const res = await fetch('/api/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, ...state }),
+      });
+      const data = await res.json();
+      status.textContent = data.injected?.ok ? '✅ 已生效 · Applied' : '⚠️ 已保存 · Press Cmd+R if needed';
+    } catch (e) {
+      status.textContent = '❌ 失败 · Failed: ' + e.message;
+    }
+  }
+
+  document.getElementById('btn-apply').addEventListener('click', () => applyConfig(true));
+  document.getElementById('btn-reset').addEventListener('click', () => applyConfig(false));
+
+  (async () => {
+    try {
+      const res = await fetch('/api/state');
+      const data = await res.json();
+      if (data?.config) {
+        if (data.config.ui) Object.assign(state.ui, data.config.ui);
+        if (data.config.prose) Object.assign(state.prose, data.config.prose);
+        if (data.config.input) Object.assign(state.input, data.config.input);
+        if (data.config.code) Object.assign(state.code, data.config.code);
+      }
+    } catch {}
+    renderChips();
+  })();
+</script>
+</body>
+</html>
