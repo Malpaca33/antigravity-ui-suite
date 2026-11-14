@@ -9,6 +9,41 @@ English | [简体中文](README.zh-CN.md)
 
 ---
 
+## Quick Start
+
+### 1. Requirements
+- macOS (Apple Silicon / Intel)
+- Google Antigravity 2.0+
+- Node.js 18+
+
+### 2. Install & Enable
+```bash
+git clone https://github.com/Malpaca33/antigravity-ui-suite.git /tmp/ag-ui-suite
+mkdir -p ~/.gemini/config/plugins/usage-monitor ~/.gemini/config/plugins/font-studio
+cp -r /tmp/ag-ui-suite/plugin.json /tmp/ag-ui-suite/pricing-catalog.json /tmp/ag-ui-suite/assets /tmp/ag-ui-suite/sidecars ~/.gemini/config/plugins/usage-monitor/
+cp -r /tmp/ag-ui-suite/font-studio/* ~/.gemini/config/plugins/font-studio/
+```
+
+Enable both plugins in `~/.gemini/config/config.json` and restart Antigravity:
+```json
+{
+  "plugins": {
+    "usage-monitor": { "enabled": true },
+    "font-studio": { "enabled": true }
+  }
+}
+```
+
+### 3. Uninstall & Rollback
+- Click **Reset** in the **Font Studio** panel to restore native typography immediately.
+- Set `"enabled": false` in `~/.gemini/config/config.json` and restart Antigravity to disable either plugin.
+
+### 4. Acknowledgements & License
+- Forked and extended from [yuhuan-dev/antigravity-usage-monitor](https://github.com/yuhuan-dev/antigravity-usage-monitor) — thanks to the original author for the topbar HUD architecture and telemetry engine.
+- Licensed under [LICENSE](LICENSE). Third-party proprietary fonts (e.g., Anthropic fonts) are **not bundled** in this repository.
+
+---
+
 ## Part 1: Antigravity Usage HUD
 
 ![Antigravity Usage HUD Topbar](assets/hud-topbar.png)

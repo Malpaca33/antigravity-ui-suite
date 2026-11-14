@@ -9,6 +9,41 @@
 
 ---
 
+## 快速上手 · Quick Start
+
+### 1. 环境要求
+- macOS（Apple Silicon / Intel）
+- Google Antigravity 2.0+
+- Node.js 18+
+
+### 2. 一键安装与启用
+```bash
+git clone https://github.com/Malpaca33/antigravity-ui-suite.git /tmp/ag-ui-suite
+mkdir -p ~/.gemini/config/plugins/usage-monitor ~/.gemini/config/plugins/font-studio
+cp -r /tmp/ag-ui-suite/plugin.json /tmp/ag-ui-suite/pricing-catalog.json /tmp/ag-ui-suite/assets /tmp/ag-ui-suite/sidecars ~/.gemini/config/plugins/usage-monitor/
+cp -r /tmp/ag-ui-suite/font-studio/* ~/.gemini/config/plugins/font-studio/
+```
+
+在 `~/.gemini/config/config.json` 的 `plugins` 中启用两项后重启 Antigravity：
+```json
+{
+  "plugins": {
+    "usage-monitor": { "enabled": true },
+    "font-studio": { "enabled": true }
+  }
+}
+```
+
+### 3. 卸载与回退
+- 在 `Font Studio` 面板底部点击 **Reset** 即可立即恢复原生字体。
+- 在 `~/.gemini/config/config.json` 中将对应插件设为 `"enabled": false` 并重启 Antigravity 即可停用。
+
+### 4. 致谢与协议 · Acknowledgements & License
+- 本仓库基于上游开源项目 [yuhuan-dev/antigravity-usage-monitor](https://github.com/yuhuan-dev/antigravity-usage-monitor) 扩展而来，感谢原作者的顶栏状态条架构与指标实现。
+- 遵循 [MIT / 原仓库 LICENSE](LICENSE) 开源协议；第三方受限字体（如 Anthropic 系列）**不随仓库分发**，请按各自授权自行准备。
+
+---
+
 ## 组件一：Antigravity Usage HUD（顶栏状态条）
 
 ![Antigravity Usage HUD 顶栏演示](assets/hud-topbar.png)
