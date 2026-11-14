@@ -1,8 +1,15 @@
-# Antigravity Usage HUD
+# Antigravity UI Suite
 
 [English](README.md) | 简体中文
 
-**Google Antigravity 顶栏极简状态条：不用点开面板，抬头直接看子代理、上下文、推理速度和双池电池余量。**
+**Google Antigravity 界面增强套件，包含两大独立组件：**
+
+1. **Usage HUD**：顶栏极简状态条，直接看子代理、上下文、推理速度和双池电池余量。
+2. **Font Studio**：侧边栏字体工坊插件，按界面区域分别配置中英文字体、字重并实时热生效。
+
+---
+
+## 组件一：Antigravity Usage HUD（顶栏状态条）
 
 ![Antigravity Usage HUD 顶栏演示](assets/hud-topbar.png)
 
@@ -68,3 +75,28 @@ git clone https://github.com/Malpaca33/antigravity-usage-hud.git "$env:USERPROFI
 ## 致谢与协议
 
 基于 [yuhuan-dev/antigravity-usage-monitor](https://github.com/yuhuan-dev/antigravity-usage-monitor) 改写，沿用 [GPL-3.0](LICENSE) 开源协议。
+
+
+---
+
+## 组件二：Font Studio（分区字体工坊插件）
+
+位于 [`font-studio/`](font-studio/) 目录，作为独立的 Antigravity 侧边栏插件运行。
+
+![Font Studio 面板实拍](assets/font-studio-panel.png)
+
+### 核心功能
+
+- **四区域独立选配**：
+  - 侧栏与界面（Sidebar & UI）
+  - 对话正文（Chat Body）
+  - 底部输入框（Input Box）
+  - 代码与终端（Code & Terminal）
+- **中英文分离控制**：
+  - 通过 `unicode-range` 将英文与中文分流，例如英文用 `Anthropic Serif Text` 或 `Google Sans`，中文搭配 `PingFang SC Medium`、`Songti SC` 或 `Sarasa Mono Slab SC`。
+- **胶囊式即时预览**：
+  - 全部选项采用页面内圆角胶囊按钮点选，无原生下拉框失焦弹回问题。
+  - 切换任意胶囊后，卡片下方实时渲染对应字体与字重效果。
+- **一键热应用与恢复**：
+  - 点击 **Apply** 自动生成 `theme.css` 并通过 CDP 热注入当前 Antigravity 窗口。
+  - 点击 **Reset** 立即解除覆盖并恢复原生默认字体。

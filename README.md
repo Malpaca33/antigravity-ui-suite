@@ -1,8 +1,15 @@
-# Antigravity Usage HUD
+# Antigravity UI Suite
 
 English | [简体中文](README.zh-CN.md)
 
-**A clean topbar status strip for Google Antigravity — see subagents, context window, generation speed, and dual-pool battery quota at a glance without opening any panel.**
+**UI enhancement suite for Google Antigravity, containing two standalone components:**
+
+1. **Usage HUD**: Zero-click topbar status strip for subagents, context window, generation speed, and dual-pool battery quota.
+2. **Font Studio**: Sidecar typography panel for per-region English & Chinese font selection, live preview, and instant hot-apply.
+
+---
+
+## Part 1: Antigravity Usage HUD
 
 ![Antigravity Usage HUD Topbar](assets/hud-topbar.png)
 
@@ -68,3 +75,28 @@ Enable `usage-monitor` under **Customizations -> Installed** in Antigravity.
 ## Credits & License
 
 Redesigned from [yuhuan-dev/antigravity-usage-monitor](https://github.com/yuhuan-dev/antigravity-usage-monitor) under [GPL-3.0](LICENSE).
+
+
+---
+
+## Part 2: Font Studio (Per-Region Typography Plugin)
+
+Located in [`font-studio/`](font-studio/), running as a standalone Antigravity sidecar panel.
+
+![Font Studio Panel](assets/font-studio-panel.png)
+
+### Key Features
+
+- **Four Independent UI Regions**:
+  - Sidebar & UI
+  - Chat Body
+  - Input Box
+  - Code & Terminal
+- **Separate English & Chinese Stacks**:
+  - Uses `unicode-range` to pair Latin fonts (`Google Sans`, `Anthropic Sans`, `Anthropic Serif Text`, `Inter`) with Chinese fonts (`PingFang SC Medium/Regular/Semibold`, `Songti SC`, `Sarasa Mono Slab SC`, `Sarasa UI SC`).
+- **Pill-Based Live Preview**:
+  - Uses inline pill selectors instead of native dropdowns to avoid focus loss in Electron webviews.
+  - Updates the inline preview inside each card immediately on click.
+- **One-Click Hot Apply & Reset**:
+  - Click **Apply** to write `theme.css` and hot-inject into the active Antigravity window via CDP.
+  - Click **Reset** to restore native default fonts immediately.
