@@ -53,7 +53,7 @@ Enable both plugins in `~/.gemini/config/config.json` and restart Antigravity:
 ## 1. Dual-Pool Battery Toggle (`Gemini` ↔ `Claude & GPT`)
 
 - The battery on the right shows your **5-hour quota** (7 cells, ~14% each) inside and your **weekly quota** as the retro-red outer border ring.
-- By default, it automatically matches the quota pool of the current conversation's model.
+- The battery automatically binds to the model currently selected in the bottom-left picker and switches pools immediately when you change models (falling back to the active conversation model).
 - **Only the battery is clickable**: click it once to switch in place between **`Gemini` (deep green)** and **`Claude & GPT` (pure white)** — zero layout shift, no popup panel, and hovering context or speed will not light up.
 
 | Pool | Live Topbar HUD |
@@ -102,8 +102,15 @@ git clone https://github.com/Malpaca33/antigravity-usage-hud.git ~/.gemini/confi
 git clone https://github.com/Malpaca33/antigravity-usage-hud.git "$env:USERPROFILE\.gemini\config\plugins\usage-monitor"
 ```
 
-Enable `usage-monitor` under **Customizations -> Installed** in Antigravity.  
-*(The original 4-tab sidecar panel remains accessible via `⋮ -> Extensions -> 用量监控`.)*
+Enable `usage-monitor` under **Customizations -> Installed** in Antigravity.
+
+> **Required for Antigravity v2.33.0+ (CDP disabled by default):**  
+> Newer Antigravity builds disable the remote debugging port by default and clean stale `DevToolsActivePort` files on launch. Quit Antigravity and start it with `--remote-debugging-port=0` so the topbar HUD can attach:
+> ```bash
+> # macOS
+> open -a "/Applications/Antigravity.app" --args --remote-debugging-port=0
+> ```
+> *(Topbar-only mode is enabled by default; to restore the right auxiliary panel, set `has_web_ui: true` and restore `ui_config` in `sidecars/panel/sidecar.json`.)*
 
 ---
 

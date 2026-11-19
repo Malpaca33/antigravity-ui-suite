@@ -929,7 +929,7 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     assert.equal(quotaSegEl.getAttribute('data-weekly-pct'), '26');
     assert.equal(quotaSegEl.querySelector('.wm-bat-weekly-fill').attributes.get('stroke-dashoffset'), '74');
     assert.match(stylesCss, /\.wm-seg-quota\s*\{[^}]*width:\s*62px;/, 'Quota battery slot uses fixed width for zero click shift');
-    assert.match(stylesCss, /\.wm-seg-speed\s*\{[^}]*width:\s*82px;/, 'Speed slot uses fixed width for zero live shift');
+    assert.match(stylesCss, /\.wm-seg-speed\s*\{[^}]*width:\s*108px;/, 'Speed slot uses fixed width for zero live shift');
     assert.match(stylesCss, /\.wm-bat-cell-fill\s*\{[^}]*background:\s*#148838;/, 'Gemini battery cells use deeper truer green');
     assert.match(stylesCss, /\.wm-seg-speed\.speed-tier-low\s*\{\s*color:\s*var\(--text-primary\);/, 'Below 46 t/s tier uses crisp primary white');
     assert.match(stylesCss, /\.wm-seg-speed\.speed-tier-green\s*\{\s*color:\s*#148838;/, 'Speed green tier uses deeper truer green');
@@ -949,11 +949,13 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     quotaSegEl.dispatchEvent({ type: 'click', stopPropagation() {} });
     assert.equal(quotaSegEl.getAttribute('data-pool'), 'gemini');
 
-    // Left subagent button opens .wm-multi-panel on hover and pins on click showing ONLY current window session & subagents
+    // Legacy 4-tab popover panel, hover overview tip, and topbar update pill are completely removed from topbar HUD
     const multiPanelEl = portalHost.shadowRoot.querySelector('.wm-multi-panel');
-    const hoverTipEl = portalHost.shadowRoot.querySelector('.wm-hover-tip');
     assert.ok(multiPanelEl, 'Current-window stream panel mounted in portal shadow root');
-    assert.ok(hoverTipEl, 'Hover overview HUD mounted in portal shadow root');
+    assert.equal(portalHost.shadowRoot.querySelector('.wm-popover-panel'), null, 'Old 4-tab popover panel is removed');
+    assert.equal(portalHost.shadowRoot.querySelector('.wm-hover-tip'), null, 'Legacy hover tip panel is removed');
+    assert.equal(capsuleHost.shadowRoot.querySelector('.wm-update-btn'), null, 'Legacy topbar update pill is removed');
+    assert.equal(capsuleHost.shadowRoot.querySelector('.wm-update-dot'), null, 'Legacy topbar update dot is removed');
 
     multiBtn.dispatchEvent({ type: 'mouseenter', clientX: 930, clientY: 18 });
     assert.equal(ov.isMultiOpen(), true, 'Hovering multi-session button opens current-window stream panel');
@@ -969,6 +971,10 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     assert.equal(liveTaskCard.querySelector('.live-task-title').textContent, 'Dual Mode Session');
     assert.equal(liveTaskCard.querySelector('.live-sub-role').textContent, 'Auth Researcher');
 
+    // Clicking conversation title inside stream panel never opens legacy popover
+    liveTaskCard.querySelector('.live-task-title').dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(ov.isOpen(), false, 'Clicking session title does not open legacy popover');
+
     multiBtn.dispatchEvent({ type: 'click', stopPropagation() {} });
     assert.equal(ov.isMultiPinnedOpen(), true, 'Clicking multi-session button pins stream panel open');
     assert.equal(multiBtn.classList.contains('is-open'), true);
@@ -978,146 +984,42 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
 
     capsuleBtn.dispatchEvent({ type: 'mouseenter', clientX: 960, clientY: 18 });
     assert.equal(ov.isHoverOpen(), false, 'Hovering topbar capsule never opens floating hover HUD');
-    assert.equal(hoverTipEl.hasAttribute('hidden'), true);
-    assert.equal(hoverTipEl.querySelector('.speed-compact-value').textContent, '92.4 tok/s');
-    assert.ok(hoverTipEl.querySelector('.progress-track')?.children[0]);
-    const hoverCtxSegBefore = hoverTipEl.querySelector('.progress-track')?.children[0];
-    const hoverSpeedVal = hoverTipEl.querySelector('.speed-compact-value');
 
-    // Programmatic ov.open() still works for direct settings/views testing
+    // Programmatic ov.open() / ov.toggle() remain safe no-ops and never open any popover
     ov.open();
-    assert.equal(ov.isMultiOpen(), false);
-    assert.equal(ov.isHoverOpen(), false);
-    assert.equal(hoverTipEl.hasAttribute('hidden'), true);
-    assert.equal(ov.isOpen(), true);
-    const popoverEl = portalHost.shadowRoot.querySelector('.wm-popover-panel');
-    assert.equal(popoverEl.hasAttribute('hidden'), false);
+    assert.equal(ov.isOpen(), false);
+    ov.toggle();
+    assert.equal(ov.isOpen(), false);
 
-    // Verify Shadow DOM retargeted click inside CustomSelect does NOT close select or popover
-    const selectRoot = portalHost.shadowRoot.querySelector('.custom-select');
-    const selectTrigger = selectRoot.querySelector('.select-trigger');
-    selectTrigger.dispatchEvent({ type: 'click', stopPropagation() {} });
-    assert.equal(selectRoot.classList.contains('is-open'), true);
-
-    // Simulate document capture-phase click retargeted to portalHost while composedPath includes selectRoot
-    for (const fn of docListeners.get('click') || []) {
-      fn({
-        target: portalHost,
-        composedPath: () => [selectTrigger, selectRoot, popoverEl, portalHost.shadowRoot, portalHost, body, docRoot],
-      });
-    }
-    assert.equal(selectRoot.classList.contains('is-open'), true, 'CustomSelect stays open via composedPath');
-    selectTrigger.dispatchEvent({ type: 'click', stopPropagation() {} });
-
-    // Verify SettingsView: weekly budget UI removed; topbar multi-session switch & 3-slot customization work live
-    const pillTabs = popoverEl.querySelectorAll('.pill-tab');
-    pillTabs[pillTabs.length - 1].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 15));
-
-    const allPanes = popoverEl.querySelectorAll('.view-pane');
-    const settingsPane = allPanes[allPanes.length - 1];
-    assert.equal(settingsPane.querySelectorAll('.number-input').length, 0, 'Obsolete weekly budget number inputs removed');
-    const settingsSelects = settingsPane.querySelectorAll('.custom-select');
-    assert.equal(
-      settingsSelects.length,
-      6,
-      'SettingsView renders 6 CustomSelect controls (mount, modelFormat, 3 topbar slots, autoUpdate)'
-    );
-    const mountSelectEl = settingsSelects[0];
-    const modelFormatSelectEl = settingsSelects[1];
-    const slot0SelectEl = settingsSelects[2];
-    const slot1SelectEl = settingsSelects[3];
-    const slot2SelectEl = settingsSelects[4];
-
-    // Toggle windowMountSelect: dual -> sidebar -> dual
-    assert.ok(mountSelectEl.querySelector('.select-label').textContent.includes('顶部栏 + 侧边栏'));
-    mountSelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    mountSelectEl.querySelectorAll('.select-option')[1].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.enableWindowOverlay, false, 'enableWindowOverlay persisted as false');
-    assert.ok(mountSelectEl.querySelector('.select-label').textContent.includes('仅侧边栏'), 'UI reflects sidebar mode');
-
-    mountSelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    mountSelectEl.querySelectorAll('.select-option')[0].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.enableWindowOverlay, true, 'enableWindowOverlay persisted back to true');
-    assert.ok(mountSelectEl.querySelector('.select-label').textContent.includes('顶部栏 + 侧边栏'), 'UI reflects dual mode');
-
-    // Toggle stepModelSelect: short -> upstream -> short
-    assert.ok(modelFormatSelectEl.querySelector('.select-label').textContent.includes('精简代号'));
-    modelFormatSelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    modelFormatSelectEl.querySelectorAll('.select-option')[1].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.showUpstreamModel, true);
-    assert.ok(modelFormatSelectEl.querySelector('.select-label').textContent.includes('原始模型 ID'));
-
-    modelFormatSelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    modelFormatSelectEl.querySelectorAll('.select-option')[0].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.showUpstreamModel, false);
-    assert.ok(modelFormatSelectEl.querySelector('.select-label').textContent.includes('精简代号'));
-
-    // Toggle topbar multi-session switch: show -> hide -> show
-    const topbarSegBtns = settingsPane.querySelectorAll('.seg-btn');
-    assert.equal(topbarSegBtns.length, 2, 'Topbar multi-session toggle has 显示 / 隐藏 buttons');
-    topbarSegBtns[1].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.showTopbarMultiSession, false);
-    assert.equal(multiBtn.hasAttribute('hidden'), true, 'Topbar multi-session button hidden immediately');
-    assert.equal(capsuleHost.getAttribute('data-multi'), 'off');
-
-    topbarSegBtns[0].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.showTopbarMultiSession, true);
-    assert.equal(multiBtn.hasAttribute('hidden'), false, 'Topbar multi-session button restored immediately');
-
-    // Customize 3 topbar capsule slots: [gemini_5h, ttft, cost], then swap order, test claude_weekly + none, then reset default
+    // Topbar capsule reacts live to backend settings updates (hide/show multiBtn + customize 3 slots)
     const capSlots = capsuleHost.shadowRoot.querySelectorAll('.wm-cap-slot');
     const capSeps = capsuleHost.shadowRoot.querySelectorAll('.wm-sep');
     assert.equal(capSlots.length, 3);
     assert.equal(capSeps.length, 2);
 
-    // Slot 0 -> Gemini 5h (option index 5)
-    slot0SelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    slot0SelectEl.querySelectorAll('.select-option')[5].dispatchEvent({ type: 'click', stopPropagation() {} });
+    mockSettings.showTopbarMultiSession = false;
+    ov.updateBridge({ port: 49152, token: 'secret-bridge-token-123' });
     await new Promise((r) => setTimeout(r, 30));
+    assert.equal(multiBtn.hasAttribute('hidden'), true, 'Topbar multi-session button hidden immediately');
+    assert.equal(capsuleHost.getAttribute('data-multi'), 'off');
+
+    mockSettings.showTopbarMultiSession = true;
+    mockSettings.topbarCapsuleSlots = ['gemini_5h', 'ttft', 'cost'];
+    ov.updateBridge({ port: 49152, token: 'secret-bridge-token-123' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(multiBtn.hasAttribute('hidden'), false, 'Topbar multi-session button restored immediately');
     assert.equal(capSlots[0].getAttribute('data-metric'), 'gemini_5h');
     assert.equal(capSlots[0].querySelector('.wm-ring-svg'), null, 'Ring SVG detached cleanly when slot leaves context');
-    assert.equal(capSlots[0].children.length, 2, 'Battery wrap + pool sublabel mounted');
     assert.ok(capSlots[0].querySelector('.wm-bat-wrap'), 'Battery gauge mounted for quota slot');
     assert.equal(capSlots[0].getAttribute('data-5h-pct'), '44');
-
-    // Slot 1 -> TTFT (option index 2)
-    slot1SelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    slot1SelectEl.querySelectorAll('.select-option')[2].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
     assert.equal(capSlots[1].getAttribute('data-metric'), 'ttft');
     assert.equal(capSlots[1].children[0].textContent, '0.85s');
-
-    // Slot 2 -> Cost (option index 3)
-    slot2SelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    slot2SelectEl.querySelectorAll('.select-option')[3].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
     assert.equal(capSlots[2].getAttribute('data-metric'), 'cost');
     assert.equal(capSlots[2].children[0].textContent, '$0.040');
-    assert.deepEqual(mockSettings.topbarCapsuleSlots, ['gemini_5h', 'ttft', 'cost']);
 
-    // Swap Slot 1 up (left) so order becomes ['ttft', 'gemini_5h', 'cost']
-    const slotMoveBtns = settingsPane.querySelectorAll('.slot-move-btn');
-    // Row 1 up button is index 2 ([row0Up, row0Down, row1Up, row1Down, row2Up, row2Down])
-    slotMoveBtns[2].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.deepEqual(mockSettings.topbarCapsuleSlots, ['ttft', 'gemini_5h', 'cost']);
-    assert.equal(capSlots[0].children[0].textContent, '0.85s');
-    assert.ok(capSlots[1].querySelector('.wm-bat-wrap'));
-    assert.equal(capSlots[1].getAttribute('data-5h-pct'), '44');
-
-    // Test hiding middle slot ('none', option index 9) and setting Slot 2 to Claude Weekly (option index 8)
-    slot1SelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    slot1SelectEl.querySelectorAll('.select-option')[9].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    slot2SelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    slot2SelectEl.querySelectorAll('.select-option')[8].dispatchEvent({ type: 'click', stopPropagation() {} });
+    // Hide middle slot ('none') and set Slot 2 to Claude Weekly
+    mockSettings.topbarCapsuleSlots = ['ttft', 'none', 'claude_weekly'];
+    ov.updateBridge({ port: 49152, token: 'secret-bridge-token-123' });
     await new Promise((r) => setTimeout(r, 30));
     assert.equal(capSlots[1].hasAttribute('hidden'), true, 'Middle slot hidden when set to none');
     assert.equal(capSeps[0].hasAttribute('hidden'), true, 'Separator before hidden middle slot collapses');
@@ -1127,89 +1029,13 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     assert.ok(capSlots[2].querySelector('.wm-bat-wrap'));
     assert.equal(capSlots[2].getAttribute('data-5h-pct'), '91');
 
-    // Reset default restores ['context', 'tps', 'quota_auto'] with ring SVG re-attached on Slot 0
-    const resetTopbarBtn = settingsPane.querySelector('.btn-ghost-sm');
-    resetTopbarBtn.dispatchEvent({ type: 'click' });
-    await new Promise((r) => setTimeout(r, 260));
-    assert.deepEqual(mockSettings.topbarCapsuleSlots, ['context', 'tps', 'quota_auto']);
+    // Restore default slots
+    mockSettings.topbarCapsuleSlots = ['context', 'tps', 'quota_auto'];
+    ov.updateBridge({ port: 49152, token: 'secret-bridge-token-123' });
+    await new Promise((r) => setTimeout(r, 30));
     assert.equal(capSlots[0].getAttribute('data-metric'), 'context');
     assert.equal(capSlots[0].children.length, 2, 'Ring SVG re-attached on Slot 0');
     assert.equal(capSlots[0].querySelector('.wm-ctx-pct').textContent, '50%');
-
-    // Verify 3-tier update mode select (manual default -> off hides topbar/hover prompts -> auto -> manual)
-    const topbarUpdateBtn = capsuleHost.shadowRoot.querySelector('.wm-update-btn');
-    const hoverUpdateBar = hoverTipEl.querySelector('.wm-hover-update-bar');
-    const headerUpdateBtn = popoverEl.querySelector('.update-badge-btn');
-    assert.ok(topbarUpdateBtn, 'Topbar subtle update pill button mounted');
-    assert.ok(hoverUpdateBar, 'Hover card update banner mounted');
-    assert.equal(topbarUpdateBtn.hasAttribute('hidden'), false, 'Update pill visible in default manual mode');
-    assert.equal(topbarUpdateBtn.querySelector('.wm-update-label').textContent, 'v1.5.0');
-    assert.ok(
-      topbarUpdateBtn.children[0].children[0].getAttribute('d').includes('13.2l3.8-3.8'),
-      'Topbar update pill uses downward arrow matching panel & settings design language'
-    );
-    assert.equal(hoverUpdateBar.hasAttribute('hidden'), false, 'Hover update bar visible in default manual mode');
-    assert.ok(
-      hoverUpdateBar
-        .querySelector('.wm-hover-update-left')
-        .children[0].children[0].getAttribute('d')
-        .includes('13.2l3.8-3.8'),
-      'Hover update bar uses downward arrow matching panel & settings design language'
-    );
-    assert.equal(
-      hoverUpdateBar.querySelector('.wm-hover-update-left').children[1].textContent,
-      '发现新版本 v1.5.0'
-    );
-    assert.equal(
-      hoverUpdateBar.querySelector('.wm-hover-update-hint').textContent,
-      '点击顶栏 v1.5.0 即可更新'
-    );
-    assert.equal(headerUpdateBtn.hasAttribute('hidden'), false);
-
-    const updateModeSelectEl = settingsSelects[5];
-    assert.equal(updateModeSelectEl.querySelector('.select-label').textContent, '仅提示新版本，手动更新');
-    updateModeSelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    const updateOpts = updateModeSelectEl.querySelectorAll('.select-option');
-    assert.equal(updateOpts.length, 3, '3 update modes rendered (manual, auto, off)');
-    assert.equal(updateOpts[0].querySelector('.select-option-text').textContent, '仅提示新版本，手动更新');
-    assert.equal(updateOpts[1].querySelector('.select-option-text').textContent, '自动更新');
-    assert.equal(updateOpts[2].querySelector('.select-option-text').textContent, '关闭更新');
-
-    updateOpts[2].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.pluginUpdateMode, 'off');
-    assert.equal(mockSettings.autoUpdatePlugin, false);
-    assert.equal(topbarUpdateBtn.hasAttribute('hidden'), true, 'Topbar update pill hidden when mode=off');
-    assert.equal(hoverUpdateBar.hasAttribute('hidden'), true, 'Hover update bar hidden when mode=off');
-    assert.equal(headerUpdateBtn.hasAttribute('hidden'), true, 'Header update button hidden when mode=off');
-
-    updateModeSelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    updateModeSelectEl.querySelectorAll('.select-option')[1].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(mockSettings.pluginUpdateMode, 'auto');
-    assert.equal(mockSettings.autoUpdatePlugin, true);
-    assert.equal(topbarUpdateBtn.hasAttribute('hidden'), false, 'Topbar update pill restored when mode=auto');
-
-    updateModeSelectEl.querySelector('.select-trigger').dispatchEvent({ type: 'click', stopPropagation() {} });
-    updateModeSelectEl.querySelectorAll('.select-option')[0].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 260));
-    assert.equal(mockSettings.pluginUpdateMode, 'manual');
-    assert.equal(mockSettings.autoUpdatePlugin, false);
-    assert.equal(topbarUpdateBtn.hasAttribute('hidden'), false, 'Topbar update pill visible when mode=manual');
-
-    // Verify ConsumptionView omits "+ 待定" / "3993 步费用待定" and StepsDetailView protects header title
-    pillTabs[1].dispatchEvent({ type: 'click', stopPropagation() {} });
-    await new Promise((r) => setTimeout(r, 15));
-    const heroCostEl = popoverEl.querySelector('.cons-hero-cost');
-    assert.equal(heroCostEl.textContent, '$1.50', 'Consumption hero cost omits + 待定');
-    const heroCostBaseline = heroCostEl.parentElement;
-    assert.equal(
-      heroCostBaseline.children[1].textContent,
-      '≈ ¥11',
-      'Consumption sub-label renders CNY approx instead of 步费用待定'
-    );
-    assert.ok(popoverEl.querySelector('.steps-panel-header'), 'Steps header flex wrapper present');
-    assert.ok(popoverEl.querySelector('.steps-panel-title'), 'Steps title non-shrinking class present');
 
     // Verify bundle version bump NEVER calls window.location.reload() in overlay mode
     currentBundleVer = 'ver-200';
@@ -1269,13 +1095,6 @@ test('Compiled app.js mounts dual Shadow DOM hosts, tracks /c/<uuid> routes, pro
     assert.equal(quotaSegEl.hasAttribute('hidden'), false, 'Quota slot stays pre-reserved even when quotas=null');
     assert.equal(quotaSegEl.getAttribute('data-5h-pct'), '');
     assert.equal(quotaSegEl.querySelector('.wm-bat-weekly-fill').attributes.get('stroke-dashoffset'), '100');
-    assert.equal(
-      hoverTipEl.querySelector('.progress-track')?.children[0],
-      hoverCtxSegBefore,
-      'Hover context bar updates strictly in-place without DOM node replacement or appendChild'
-    );
-    assert.equal(hoverTipEl.querySelector('.speed-compact-value'), hoverSpeedVal);
-    assert.equal(hoverSpeedVal.textContent, '120.5 tok/s');
 
     // Verify in-place bridge port rotation preserves exact DOM host nodes without remount
     fetchShouldFail = false;

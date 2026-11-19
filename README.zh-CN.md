@@ -53,7 +53,7 @@ cp -r /tmp/ag-ui-suite/font-studio/* ~/.gemini/config/plugins/font-studio/
 ## 1. 双额度池电池原地切换（`Gemini` ↔ `Claude & GPT`）
 
 - 最右侧是一颗 **7 格小电池**：里面一格约 14% 对应 **5 小时窗口剩余额度**，外圈复古红框对应 **周限额余量**。
-- 默认当前对话用什么模型，就自动显示对应额度池的电池。
+- 电池实时绑定左下角当前选中的模型，切换模型时自动切到对应额度池（未匹配选择器时回退到当前会话模型）。
 - **整个状态条只有电池可以点**：点一下电池，就在 **`Gemini`（深正绿）** 和 **`Claude & GPT`（纯白）** 两个额度池之间原地切换，位置分毫不差、不弹面板；左边上下文和速度移上去不点亮、不可点。
 
 | 当前显示的额度池 | 顶栏实机效果 |
@@ -102,8 +102,15 @@ git clone https://github.com/Malpaca33/antigravity-usage-hud.git ~/.gemini/confi
 git clone https://github.com/Malpaca33/antigravity-usage-hud.git "$env:USERPROFILE\.gemini\config\plugins\usage-monitor"
 ```
 
-装好后在 Antigravity 左侧 **Customizations -> Installed** 里开启 `usage-monitor` 即可自动显示在顶栏（不改客户端安装包）。  
-*需要看历史账单或详细趋势时，仍可从右上角 `⋮ -> Extensions -> 用量监控` 打开原版侧栏面板。*
+装好后在 Antigravity 左侧 **Customizations -> Installed** 里开启 `usage-monitor`（不改客户端安装包）。
+
+> **Antigravity v2.33.0+ 必读（默认关闭 CDP 调试端口）：**  
+> 新版客户端默认不开启调试端口且会清理旧 `DevToolsActivePort`，需退出后带 `--remote-debugging-port=0` 启动才能挂载顶栏 HUD：
+> ```bash
+> # macOS
+> open -a "/Applications/Antigravity.app" --args --remote-debugging-port=0
+> ```
+> *（可将该命令打包为独立 `.app` 启动器放 Dock 栏日常使用；默认已设为纯顶栏模式，如需恢复右侧辅助栏面板，将 `sidecars/panel/sidecar.json` 的 `has_web_ui` 改为 `true` 并还原 `ui_config` 即可。）*
 
 ---
 

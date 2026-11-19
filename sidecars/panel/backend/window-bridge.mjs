@@ -55,7 +55,15 @@ export function resolveDevToolsPortCandidates(
     ];
   }
   if (platform === 'darwin') {
-    return [join(homeDir, 'Library', 'Application Support', 'Antigravity', 'DevToolsActivePort')];
+    const candidates = [
+      join(homeDir, 'Library', 'Application Support', 'Antigravity', 'DevToolsActivePort'),
+      join(homeDir, 'Library', 'Application Support', 'Antigravity-HUD', 'DevToolsActivePort'),
+    ];
+    const agyEnvFile = String(env?.AGY_BROWSER_ACTIVE_PORT_FILE || '').trim();
+    if (agyEnvFile && !candidates.includes(agyEnvFile)) {
+      candidates.push(agyEnvFile);
+    }
+    return candidates;
   }
   const configHome = env?.XDG_CONFIG_HOME || join(homeDir, '.config');
   return [join(configHome, 'Antigravity', 'DevToolsActivePort')];

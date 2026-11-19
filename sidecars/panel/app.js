@@ -6356,14 +6356,13 @@ const App = defineComponent({
  * 采用「分离式双 Shadow Host」架构，彻底规避宿主顶栏层叠上下文 (`z-0` / `overflow: hidden`) 裁切与路由重绘卸载问题：
  * 1. `#ag-usage-monitor-capsule`：轻量顶栏胶囊，优先内嵌停靠至 `[class*="@container/titlebar"]` 右侧按钮组，
  *    支持四级迟滞宽度自适应折叠（`wide` -> `compact` -> `minimal` -> `ring-only`），找不到顶栏时自动回退至右上角固定定位；
- * 2. `#ag-usage-monitor-portal`：常驻 `document.body` 顶层的无遮挡浮层宿主，承载悬停速览卡与完整四标签 `App()` 监控面板，
- *    在宿主切换会话重建顶栏 DOM 时始终保持组件实例、滚动位置与动画状态不丢失。
+ * 2. `#ag-usage-monitor-portal`：常驻 `document.body` 顶层的无遮挡浮层宿主，仅承载当前窗口实时运行流与子代理面板 (`wm-multi-panel`)，
+ *    在宿主切换会话重建顶栏 DOM 时始终保持组件实例与状态不丢失。
  */
 
 
 const CAPSULE_HOST_ID = 'ag-usage-monitor-capsule';
 const PORTAL_HOST_ID = 'ag-usage-monitor-portal';
-const FLOATING_CARD_WIDTH = 340;
 const MULTI_PANEL_WIDTH = 360;
 const RING_RADIUS = 10.4;
 const RING_CIRCUMFERENCE = +(2 * Math.PI * RING_RADIUS).toFixed(2);
@@ -6380,9 +6379,8 @@ const RING_CIRCUMFERENCE = +(2 * Math.PI * RING_RADIUS).toFixed(2);
 function computeCapsuleLayoutMode(availWidth, currentMode = 'wide', options = undefined) {
   if (availWidth == null || Number.isNaN(availWidth)) return 'wide';
   const showMulti = options?.showMulti !== false;
-  const updateReserve = options?.hasUpdate ? 52 : 0;
   const baseEffWidth = showMulti ? availWidth : availWidth + 76;
-  const effWidth = baseEffWidth - updateReserve;
+  const effWidth = baseEffWidth;
   if (currentMode === 'wide') {
     if (baseEffWidth < 78) return 'ring-only';
     if (effWidth < 196) return 'minimal';
@@ -6683,7 +6681,22 @@ function formatCompactContextLimit(tokens) {
   return `${k}k`;
 }
 
+function readSelectedModelTextFromHostDom() {
+  if (typeof document === 'undefined' || typeof document.querySelector !== 'function') {
+    return '';
+  }
+  const btn = document.querySelector(
+    'button[aria-label^="Select model"], button[aria-label*="模型"]'
+  );
+  if (!btn) return '';
+  return String(btn.getAttribute?.('aria-label') || btn.textContent || '').trim();
+}
+
 function detectActiveModelQuotaPool(telemetry, activeConv) {
+  const domModelHint = readSelectedModelTextFromHostDom();
+  if (domModelHint) {
+    return THIRD_PARTY_FAMILY_RE.test(domModelHint) ? 'claude' : 'gemini';
+  }
   const modelHint = [
     activeConv?.activeModelLabel,
     activeConv?.activeModelShort,
@@ -6780,23 +6793,19 @@ function formatCompactCapsuleTtft(ttftSec) {
 }
 
 /**
- * 在主窗口挂载双栖顶栏胶囊与完整四标签悬浮面板，并注册 `window.__AGUsageMonitorOverlay` 生命周期句柄。
+ * 在主窗口挂载双栖顶栏胶囊与当前窗口实时运行流面板，并注册 `window.__AGUsageMonitorOverlay` 生命周期句柄。
  */
 function mountWindowOverlay() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null;
 
   // 先读取旧实例缓存的遥测快照与展开态（热升级时无缝承接数据与悬停状态，杜绝闪烁或关开），再安全卸载旧实例
   let carryOverTelemetry = null;
-  let carryOverTooltipOpen = false;
-  let carryOverPopoverOpen = false;
   let carryOverMultiHoverOpen = false;
   let carryOverMultiPinnedOpen = false;
   let carryOverPointer = null;
   try {
     const prevOv = window.__AGUsageMonitorOverlay;
     carryOverTelemetry = prevOv?.getTelemetrySnapshot?.() || null;
-    carryOverTooltipOpen = Boolean(prevOv?.isHoverOpen?.());
-    carryOverPopoverOpen = Boolean(prevOv?.isOpen?.());
     carryOverMultiHoverOpen = Boolean(prevOv?.isMultiHoverOpen?.());
     carryOverMultiPinnedOpen = Boolean(prevOv?.isMultiPinnedOpen?.());
     carryOverPointer = prevOv?.getLastPointer?.() || null;
@@ -6830,11 +6839,8 @@ function mountWindowOverlay() {
   }
 
   let disposed = false;
-  let popoverOpen = false;
-  let tooltipOpen = false;
   let multiOpen = false;
   let multiPinned = false;
-  let hoverLeaveTimer = null;
   let multiLeaveTimer = null;
   const manualSubExpandMap = new Map();
   const multiTimersMap = new Map();
@@ -6857,27 +6863,6 @@ function mountWindowOverlay() {
       lastPointerY = e.clientY;
       hasPointerCoords = true;
     }
-  }
-
-  function isPointerStillInCapsule() {
-    if (!hasPointerCoords || document.hidden || !capsuleBtn.getBoundingClientRect) {
-      return false;
-    }
-    const r = capsuleBtn.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return false;
-    let rightBound = r.right;
-    if (!topbarUpdateBtn.hasAttribute('hidden') && topbarUpdateBtn.getBoundingClientRect) {
-      const ur = topbarUpdateBtn.getBoundingClientRect();
-      if (ur.width > 0 && ur.height > 0) {
-        rightBound = Math.max(rightBound, ur.right);
-      }
-    }
-    return (
-      lastPointerX >= r.left - 1 &&
-      lastPointerX <= rightBound + 1 &&
-      lastPointerY >= r.top - 1 &&
-      lastPointerY <= r.bottom + 1
-    );
   }
 
   function isPointerInMultiZone() {
@@ -6977,19 +6962,6 @@ function mountWindowOverlay() {
     }
   }
 
-  function inspectSessionInMonitor(cascadeId) {
-    if (!cascadeId || cascadeId === 'current') return;
-    uiStore.setState({
-      activeView: 'overview',
-      selectedAgentScope: 'all',
-      ctxInspectorAgentId: 'auto',
-    });
-    telemetryStore.setState({ selectedConversationId: cascadeId });
-    void fetchTelemetry({ force: false });
-    setMultiOpen(false);
-    setPopoverOpen(true);
-  }
-
   // --- 1. 创建顶栏双胶囊 Shadow Host（左：多会话实时信息；右：单会话指标胶囊） ---
   const capsuleHost = document.createElement('div');
   capsuleHost.id = CAPSULE_HOST_ID;
@@ -7031,7 +7003,7 @@ function mountWindowOverlay() {
           clearTimeout(multiLeaveTimer);
           multiLeaveTimer = null;
         }
-        if (!popoverOpen && !multiPinned) {
+        if (!multiPinned) {
           setMultiOpen(true, { pinned: false });
         }
       },
@@ -7223,52 +7195,6 @@ function mountWindowOverlay() {
   const sep0 = h('span', { className: 'wm-sep wm-sep-speed', 'data-sep-for-rank': '2' });
   const sep1 = h('span', { className: 'wm-sep wm-sep-quota', 'data-sep-for-rank': '3' });
   let lastShowMulti = true;
-  let lastShowUpdate = false;
-  let isTopbarUpdating = false;
-
-  const updateDot = h('span', { className: 'wm-update-dot', hidden: true });
-  const topbarUpdateIcon = createSvgIcon('arrow-down', { size: 10 });
-  const topbarUpdateLabel = h('span', { className: 'wm-update-label', text: '新版本' });
-  const topbarUpdateBtn = h(
-    'button',
-    {
-      type: 'button',
-      className: 'wm-update-btn',
-      hidden: true,
-      'aria-label': '发现新版本，点击更新',
-      title: '发现新版本，点击立即更新',
-      onClick: async (e) => {
-        e.stopPropagation();
-        if (isTopbarUpdating) return;
-        isTopbarUpdating = true;
-        patchClasses(topbarUpdateBtn, { 'is-updating': true });
-        patchSvgIcon(topbarUpdateIcon, 'refresh');
-        patchText(topbarUpdateLabel, '更新中…');
-        patchAttr(topbarUpdateBtn, 'disabled', true);
-        try {
-          const res = await triggerPluginUpdate();
-          if (!res?.ok) {
-            uiStore.setState({ activeView: 'settings' });
-            setPopoverOpen(true);
-          }
-        } catch {
-          uiStore.setState({ activeView: 'settings' });
-          setPopoverOpen(true);
-        } finally {
-          isTopbarUpdating = false;
-          patchClasses(topbarUpdateBtn, { 'is-updating': false });
-          patchSvgIcon(topbarUpdateIcon, 'arrow-down');
-          patchAttr(topbarUpdateBtn, 'disabled', false);
-          const cs = telemetryStore.getState().telemetry?.cloudStatus;
-          patchText(
-            topbarUpdateLabel,
-            cs?.latestPluginVersion ? `v${cs.latestPluginVersion}` : '新版本'
-          );
-        }
-      },
-    },
-    [topbarUpdateIcon, topbarUpdateLabel]
-  );
 
   const capsuleBtn = h(
     'div',
@@ -7281,11 +7207,10 @@ function mountWindowOverlay() {
         void fetchTelemetry({ force: true });
       },
     },
-    [capsuleSlots[0].el, sep0, capsuleSlots[1].el, sep1, capsuleSlots[2].el, updateDot]
+    [capsuleSlots[0].el, sep0, capsuleSlots[1].el, sep1, capsuleSlots[2].el]
   );
   capsuleShadow.appendChild(multiBtn);
   capsuleShadow.appendChild(capsuleBtn);
-  capsuleShadow.appendChild(topbarUpdateBtn);
 
   // --- 2. 创建 Body 顶层浮层 Portal Shadow Host ---
   const portalHost = document.createElement('div');
@@ -7296,85 +7221,6 @@ function mountWindowOverlay() {
   const portalStyleEl = document.createElement('style');
   portalStyleEl.textContent = stylesCss;
   portalShadow.appendChild(portalStyleEl);
-
-  // 悬停紧凑概览浮层（单行实时速度 + 纯条上下文窗口 + Gemini 7 格电量额度）
-  const hoverSpeedCard = createCompactSpeedCard();
-
-  const hoverCtxAgentBadge = h('span', {
-    className: 'agent-badge badge-main',
-    hidden: true,
-    text: '主代理',
-  });
-  const hoverCtxSummaryText = h('span', { className: 'text-mono', text: '0%' });
-  const hoverCtxSegmentBar = ContextSegmentMeter({ context: {} });
-
-  const hoverCtxLegendGrid = h('div', { className: 'ctx-legend-grid', hidden: true });
-
-  const hoverCtxPanel = h('section', { className: 'panel panel-compact' }, [
-    h('div', { className: 'panel-header' }, [
-      h('span', { className: 'panel-title' }, [
-        createSvgIcon('layers', { size: 12 }),
-        h('span', { text: '上下文窗口' }),
-        hoverCtxAgentBadge,
-      ]),
-      h('span', { className: 'panel-meta' }, [hoverCtxSummaryText]),
-    ]),
-    hoverCtxSegmentBar.el,
-    hoverCtxLegendGrid,
-  ]);
-
-  const hoverTierBadge = h('span', { className: 'panel-meta', text: 'Gemini' });
-  const hoverPoolsListEl = h('div', { className: 'wm-hover-quota-pools quota-pools-compact' });
-  patchKeyedList(
-    hoverPoolsListEl,
-    buildQuotaPoolItems(null, 0, { isPending: true }),
-    {
-      keyFn: (item) => item.key,
-      sigFn: quotaPoolRowSig,
-      createRow: createPoolQuotaRow,
-      updateRow: syncPoolQuotaRow,
-    }
-  );
-
-  const hoverQuotaPanel = h('section', { className: 'panel panel-compact' }, [
-    h('div', { className: 'panel-header' }, [
-      h('span', { className: 'panel-title' }, [
-        createSvgIcon('pulse', { size: 12 }),
-        h('span', { text: '可用额度' }),
-      ]),
-      hoverTierBadge,
-    ]),
-    hoverPoolsListEl,
-  ]);
-
-  const hoverUpdateVerText = h('span', { text: '发现新版本' });
-  const hoverUpdateHintText = h('span', {
-    className: 'wm-hover-update-hint',
-    text: '点击顶栏版本胶囊即可一键更新',
-  });
-  const hoverUpdateBar = h(
-    'div',
-    {
-      className: 'wm-hover-update-bar',
-      hidden: true,
-    },
-    [
-      h('span', { className: 'wm-hover-update-left' }, [
-        createSvgIcon('arrow-down', { size: 11 }),
-        hoverUpdateVerText,
-      ]),
-      hoverUpdateHintText,
-    ]
-  );
-
-  const hoverTipEl = h(
-    'div',
-    {
-      className: 'wm-hover-tip',
-      hidden: true,
-    },
-    [hoverUpdateBar, hoverSpeedCard.el, hoverCtxPanel, hoverQuotaPanel]
-  );
 
   // 左侧多会话实时看板浮层（活跃运行会话卡片 + 近期多窗口会话速览，全槽位预占、就地补丁更新）
   function createMultiLiveSubRow() {
@@ -7519,22 +7365,7 @@ function mountWindowOverlay() {
     [multiHeaderEl, multiEmptyEl, multiRunningListEl]
   );
 
-  // 完整四标签悬浮容器
-  const appInstance = App();
-  const popoverEl = h(
-    'div',
-    {
-      className: 'wm-popover-panel',
-      role: 'dialog',
-      'aria-label': '用量与速度监控面板',
-      hidden: true,
-    },
-    [appInstance.el]
-  );
-
   portalShadow.appendChild(multiPanelEl);
-  portalShadow.appendChild(hoverTipEl);
-  portalShadow.appendChild(popoverEl);
   (document.body || document.documentElement).appendChild(portalHost);
 
   // --- 3. 几何测量、顶栏停靠与防溢出定位 ---
@@ -7625,7 +7456,6 @@ function mountWindowOverlay() {
       const vh = Number(window.innerHeight || 800);
       const navRight = getLeftSidebarRightEdge(vw);
       const minLeft = navRight > 0 ? Math.max(12, navRight + 12) : 12;
-      const defaultCardW = Math.min(FLOATING_CARD_WIDTH, Math.max(280, vw - 24));
       const defaultMultiW = Math.min(MULTI_PANEL_WIDTH, Math.max(280, vw - 24));
 
       if (multiOpen) {
@@ -7651,48 +7481,6 @@ function mountWindowOverlay() {
         multiPanelEl.style.left = `${left}px`;
         multiPanelEl.style.maxHeight = `${Math.max(240, vh - top - 12)}px`;
       }
-
-      const rightAnchorEdge =
-        !topbarUpdateBtn.hasAttribute('hidden') && topbarUpdateBtn.getBoundingClientRect
-          ? Math.max(bRect.right, topbarUpdateBtn.getBoundingClientRect().right || 0)
-          : bRect.right;
-
-      if (popoverOpen) {
-        const rawW =
-          Number(popoverEl.offsetWidth) ||
-          Number(popoverEl.getBoundingClientRect?.().width) ||
-          defaultCardW;
-        const panelW = Math.min(rawW, Math.max(280, vw - minLeft - 12));
-        const top = Math.max(38, Math.min(vh - 140, Math.round(bRect.bottom + 6)));
-        let left = Math.round(rightAnchorEdge - panelW);
-        left = Math.min(left, vw - panelW - 12);
-        left = Math.max(minLeft, left);
-        popoverEl.style.top = `${top}px`;
-        popoverEl.style.left = `${left}px`;
-        popoverEl.style.maxHeight = `${Math.max(240, vh - top - 12)}px`;
-      }
-
-      if (tooltipOpen && !popoverOpen && !multiOpen) {
-        const rawW =
-          Number(hoverTipEl.offsetWidth) ||
-          Number(hoverTipEl.getBoundingClientRect?.().width) ||
-          defaultCardW;
-        const tipW = Math.min(rawW, Math.max(280, vw - minLeft - 12));
-        const tipH =
-          Number(hoverTipEl.offsetHeight) ||
-          Number(hoverTipEl.getBoundingClientRect?.().height) ||
-          480;
-        let top = Math.max(38, Math.round(bRect.bottom + 6));
-        if (top + tipH > vh - 8 && bRect.top > tipH + 12) {
-          top = Math.round(bRect.top - tipH - 6);
-        }
-        let left = Math.round(rightAnchorEdge - tipW);
-        left = Math.min(left, vw - tipW - 12);
-        left = Math.max(minLeft, left);
-        hoverTipEl.style.top = `${top}px`;
-        hoverTipEl.style.left = `${left}px`;
-        hoverTipEl.style.maxHeight = `${Math.max(240, vh - top - 12)}px`;
-      }
     } catch {
       // 忽略定位异常
     }
@@ -7704,12 +7492,7 @@ function mountWindowOverlay() {
     const avail = measureAvailableTitlebarWidth(titlebar);
     const curTel = telemetryStore.getState().telemetry;
     const showMulti = curTel?.settings?.showTopbarMultiSession !== false;
-    const curUpdateMode = normalizeClientUpdateMode(
-      curTel?.settings?.pluginUpdateMode,
-      curTel?.settings?.autoUpdatePlugin
-    );
-    const hasUpdate = Boolean(curTel?.cloudStatus?.updateAvailable) && curUpdateMode !== 'off';
-    const nextMode = computeCapsuleLayoutMode(avail, layoutMode, { showMulti, hasUpdate });
+    const nextMode = computeCapsuleLayoutMode(avail, layoutMode, { showMulti });
     if (nextMode !== layoutMode) {
       layoutMode = nextMode;
       capsuleHost.setAttribute('data-layout', layoutMode);
@@ -7717,7 +7500,7 @@ function mountWindowOverlay() {
     if (capsuleHost.getAttribute('data-dock') === 'fixed') {
       updateFixedFallbackPosition();
     }
-    if (popoverOpen || tooltipOpen || multiOpen) {
+    if (multiOpen) {
       positionFloatingElements();
     }
   }
@@ -7791,32 +7574,11 @@ function mountWindowOverlay() {
     }
   }
 
-  function refreshActiveViewScrollbars() {
-    const activeView = uiStore.getState().activeView;
-    const refs = appInstance.refs;
-    if (activeView === 'overview') {
-      refs?.overviewView?.refs?.viewScrollbar?.refresh();
-    } else if (activeView === 'consumption') {
-      refs?.consumptionView?.refs?.viewScrollbar?.refresh();
-    } else if (activeView === 'steps') {
-      refs?.stepsView?.refs?.stepsScroll?.refresh();
-      refs?.stepsView?.refs?.modelsScroll?.refresh();
-    } else if (activeView === 'settings') {
-      refs?.settingsView?.refs?.viewScrollbar?.refresh();
-    }
-  }
-
   function setMultiOpen(nextOpen, { pinned = false, instant = false } = {}) {
     const targetOpen = Boolean(nextOpen);
     if (targetOpen && multiLeaveTimer) {
       clearTimeout(multiLeaveTimer);
       multiLeaveTimer = null;
-    }
-    if (targetOpen) {
-      setTooltipOpen(false);
-      if (pinned && popoverOpen) {
-        setPopoverOpen(false);
-      }
     }
     const nextPinned = targetOpen ? Boolean(pinned) : false;
     const stateChanged = multiOpen !== targetOpen || multiPinned !== nextPinned;
@@ -7832,51 +7594,6 @@ function mountWindowOverlay() {
       positionFloatingElements();
       if (typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(() => positionFloatingElements());
-      }
-    }
-  }
-
-  function setTooltipOpen(nextOpen, { instant = false } = {}) {
-    const targetOpen = Boolean(nextOpen && !popoverOpen && !(multiOpen && multiPinned));
-    if (targetOpen && hoverLeaveTimer) {
-      clearTimeout(hoverLeaveTimer);
-      hoverLeaveTimer = null;
-    }
-    if (targetOpen && multiOpen && !multiPinned) {
-      setMultiOpen(false);
-    }
-    if (tooltipOpen === targetOpen) return;
-    tooltipOpen = targetOpen;
-    patchClasses(hoverTipEl, { 'is-instant': Boolean(instant && targetOpen) });
-    patchAttr(hoverTipEl, 'hidden', !tooltipOpen);
-    if (tooltipOpen) {
-      positionFloatingElements();
-    }
-  }
-
-  function setPopoverOpen(nextOpen, { instant = false } = {}) {
-    const targetOpen = Boolean(nextOpen);
-    if (targetOpen) {
-      setTooltipOpen(false);
-      if (multiOpen) {
-        setMultiOpen(false);
-      }
-    }
-    if (popoverOpen === targetOpen) return;
-    popoverOpen = targetOpen;
-    patchClasses(capsuleBtn, { 'is-open': popoverOpen });
-    patchClasses(popoverEl, { 'is-instant': Boolean(instant && popoverOpen) });
-    patchAttr(capsuleBtn, 'aria-expanded', popoverOpen ? 'true' : 'false');
-    patchAttr(popoverEl, 'hidden', !popoverOpen);
-    if (popoverOpen) {
-      positionFloatingElements();
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(() => {
-          positionFloatingElements();
-          refreshActiveViewScrollbars();
-        });
-      } else {
-        refreshActiveViewScrollbars();
       }
     }
   }
@@ -8537,11 +8254,7 @@ function mountWindowOverlay() {
 
           const convTitle = item.title || item.cascadeId?.slice(0, 8) || '当前会话';
           patchText(refs.titleEl, convTitle);
-          patchAttr(refs.titleEl, 'title', `点击在监控面板中检视会话：${convTitle}`);
-          refs.titleEl.onclick = (e) => {
-            e.stopPropagation();
-            inspectSessionInMonitor(item.cascadeId);
-          };
+          patchAttr(refs.titleEl, 'title', convTitle);
 
           const isHere =
             Boolean(hostRouteLower) &&
@@ -8665,7 +8378,7 @@ function mountWindowOverlay() {
       ensureMultiLiveTicker();
     }
 
-    // --- 4b. 同步右侧指标胶囊与悬停全景三卡片 ---
+    // --- 4b. 同步右侧指标胶囊 ---
     const isRunning = hasCurrentConv
       ? Boolean(aggregated?.isRunning || activeConv.isRunning)
       : Boolean(hasTransitionSummary && transitionSummary.isRunning);
@@ -8695,6 +8408,9 @@ function mountWindowOverlay() {
       telemetry,
       hasCurrentConv || hasTransitionSummary ? overviewActive : {}
     );
+    if (autoQuotaPool !== lastAutoQuotaPool) {
+      manualQuotaPoolOverride = null;
+    }
     lastAutoQuotaPool = autoQuotaPool;
     const quotaPoolChoice = manualQuotaPoolOverride || autoQuotaPool;
     patchClasses(capsuleBtn, { 'is-running': isRunning });
@@ -8715,65 +8431,6 @@ function mountWindowOverlay() {
       stepCost: capsuleStepCost,
       quotas: telemetry.quotas,
     });
-
-    const updateMode = normalizeClientUpdateMode(
-      telemetry.settings?.pluginUpdateMode,
-      telemetry.settings?.autoUpdatePlugin
-    );
-    const showUpdatePrompt =
-      Boolean(telemetry.cloudStatus?.updateAvailable) && updateMode !== 'off';
-    const latestVer = telemetry.cloudStatus?.latestPluginVersion || '';
-    patchAttr(updateDot, 'hidden', !showUpdatePrompt);
-    patchAttr(topbarUpdateBtn, 'hidden', !showUpdatePrompt);
-    patchAttr(hoverUpdateBar, 'hidden', !showUpdatePrompt);
-    if (showUpdatePrompt) {
-      if (!isTopbarUpdating) {
-        patchText(topbarUpdateLabel, latestVer ? `v${latestVer}` : '新版本');
-      }
-      patchAttr(
-        topbarUpdateBtn,
-        'title',
-        latestVer ? `发现新版本 v${latestVer}，左键立即更新` : '发现新版本，左键立即更新'
-      );
-      patchText(
-        hoverUpdateVerText,
-        latestVer ? `发现新版本 v${latestVer}` : '发现新版本可用'
-      );
-      patchText(
-        hoverUpdateHintText,
-        latestVer ? `点击顶栏 v${latestVer} 即可更新` : '点击顶栏版本胶囊即可更新'
-      );
-    }
-    if (showUpdatePrompt !== lastShowUpdate) {
-      lastShowUpdate = showUpdatePrompt;
-      updateResponsiveLayout();
-    }
-
-    // --- 同步悬停紧凑三卡片概览 ---
-    syncCompactSpeedCard(hoverSpeedCard.refs, overviewActive, {
-      hasSubagents,
-      showUpstream,
-      isRunning: Boolean(overviewActive.isRunning || isRunning),
-    });
-
-    patchAttr(hoverCtxAgentBadge, 'hidden', !(hasSubagents && ctxAgent));
-    if (hasSubagents && ctxAgent) {
-      const badgeCls = getAgentBadgeClass(ctxAgent.index || 0, Boolean(ctxAgent.isMain));
-      patchAttr(hoverCtxAgentBadge, 'class', `agent-badge ${badgeCls}`);
-      patchText(hoverCtxAgentBadge, formatAgentLabel(ctxAgent));
-    }
-    patchText(hoverCtxSummaryText, `${usedPct}%`);
-    hoverCtxSegmentBar.setProps({ context: { ...ctx, limitTokens, usedPct } });
-
-    const quotas = telemetry.quotas || {};
-    const minuteTick = Number(telSt.minuteTick || Math.floor(Date.now() / 30000));
-    patchText(hoverTierBadge, 'Gemini');
-    patchKeyedList(hoverPoolsListEl, buildQuotaPoolItems(quotas, minuteTick), {
-      keyFn: (item) => item.key,
-      sigFn: quotaPoolRowSig,
-      createRow: createPoolQuotaRow,
-      updateRow: syncPoolQuotaRow,
-    });
   }
 
   const unsubStore = telemetryStore.subscribe(
@@ -8786,7 +8443,6 @@ function mountWindowOverlay() {
     }),
     (slice) => {
       if (slice.telemetry?.settings?.enableWindowOverlay === false) {
-        if (popoverOpen) setPopoverOpen(false);
         if (multiOpen) setMultiOpen(false);
       }
       renderCapsuleTelemetry();
@@ -8830,9 +8486,6 @@ function mountWindowOverlay() {
   };
 
   const onDocMouseDown = (e) => {
-    if (popoverOpen && !isEventInside(e, popoverEl) && !isEventInside(e, capsuleHost)) {
-      setPopoverOpen(false);
-    }
     if (multiOpen && !isEventInside(e, multiPanelEl) && !isEventInside(e, capsuleHost)) {
       setMultiOpen(false);
     }
@@ -8840,9 +8493,6 @@ function mountWindowOverlay() {
 
   const onDocKeyDown = (e) => {
     if (e.key === 'Escape' && !e.defaultPrevented) {
-      if (popoverOpen) {
-        setPopoverOpen(false);
-      }
       if (multiOpen) {
         setMultiOpen(false);
       }
@@ -8852,9 +8502,6 @@ function mountWindowOverlay() {
   const onWindowPointerMove = (e) => recordPointerCoords(e);
   const onWindowBlur = () => {
     hasPointerCoords = false;
-    if (tooltipOpen) {
-      setTooltipOpen(false);
-    }
     if (multiOpen && !multiPinned) {
       setMultiOpen(false);
     }
@@ -8864,9 +8511,6 @@ function mountWindowOverlay() {
   const onVisibilityChange = () => {
     if (document.hidden) {
       hasPointerCoords = false;
-      if (tooltipOpen) {
-        setTooltipOpen(false);
-      }
       if (multiOpen && !multiPinned) {
         setMultiOpen(false);
       }
@@ -8914,9 +8558,15 @@ function mountWindowOverlay() {
   window.addEventListener?.('hashchange', onPopState);
   navigator?.windowControlsOverlay?.addEventListener?.('geometrychange', onWindowResize);
 
+  let lastHostModelText = readSelectedModelTextFromHostDom();
   const watchdogTimer = setInterval(() => {
     if (disposed) return;
     syncHostRouteIfChanged();
+    const curModelText = readSelectedModelTextFromHostDom();
+    if (curModelText && curModelText !== lastHostModelText) {
+      lastHostModelText = curModelText;
+      renderCapsuleTelemetry();
+    }
     if (!capsuleHost.isConnected || !portalHost.isConnected) {
       ensureCapsuleDocked();
     }
@@ -8926,14 +8576,10 @@ function mountWindowOverlay() {
   renderCapsuleTelemetry();
   const allowMultiCarryOver =
     telemetryStore.getState().telemetry?.settings?.showTopbarMultiSession !== false;
-  if (carryOverPopoverOpen) {
-    setPopoverOpen(true, { instant: true });
-  } else if (carryOverMultiPinnedOpen && allowMultiCarryOver) {
+  if (carryOverMultiPinnedOpen && allowMultiCarryOver) {
     setMultiOpen(true, { pinned: true, instant: true });
   } else if (carryOverMultiHoverOpen && allowMultiCarryOver) {
     setMultiOpen(true, { pinned: false, instant: true });
-  } else if (carryOverTooltipOpen) {
-    setTooltipOpen(true, { instant: true });
   }
   const stopPolling = startAsyncTelemetryLoop(2000);
 
@@ -8969,23 +8615,17 @@ function mountWindowOverlay() {
       if (disposed) return 0;
       return deliverCdpBridgeResponses(responses);
     },
-    open() {
-      setPopoverOpen(true);
-    },
-    close() {
-      setPopoverOpen(false);
-    },
-    toggle() {
-      setPopoverOpen(!popoverOpen);
-    },
+    open() {},
+    close() {},
+    toggle() {},
     openMulti(pinned = true) {
       setMultiOpen(true, { pinned: Boolean(pinned) });
     },
     closeMulti() {
       setMultiOpen(false);
     },
-    isOpen: () => popoverOpen,
-    isHoverOpen: () => tooltipOpen,
+    isOpen: () => false,
+    isHoverOpen: () => false,
     isMultiOpen: () => multiOpen,
     isMultiHoverOpen: () => Boolean(multiOpen && !multiPinned),
     isMultiPinnedOpen: () => Boolean(multiOpen && multiPinned),
@@ -8994,10 +8634,6 @@ function mountWindowOverlay() {
       if (disposed) return;
       disposed = true;
       clearInterval(watchdogTimer);
-      if (hoverLeaveTimer) {
-        clearTimeout(hoverLeaveTimer);
-        hoverLeaveTimer = null;
-      }
       if (multiLeaveTimer) {
         clearTimeout(multiLeaveTimer);
         multiLeaveTimer = null;
@@ -9031,12 +8667,6 @@ function mountWindowOverlay() {
       window.removeEventListener?.('popstate', onPopState);
       window.removeEventListener?.('hashchange', onPopState);
       navigator?.windowControlsOverlay?.removeEventListener?.('geometrychange', onWindowResize);
-      try {
-        hoverCtxSegmentBar.destroy();
-      } catch {}
-      try {
-        appInstance.destroy();
-      } catch {}
       try {
         capsuleHost.remove();
       } catch {}
